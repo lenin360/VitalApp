@@ -52,7 +52,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 // ============================================
-// REGISTRO (AGREGAR ESTO)
+// REGISTRO
 // ============================================
 app.post('/api/register', async (req, res) => {
     const { nombre, email, password, edad } = req.body;
@@ -94,6 +94,7 @@ app.get('/api/exercises', async (req, res) => {
     const [rows] = await pool.query('SELECT * FROM ejercicios WHERE activo = 1');
     res.json({ exercises: rows });
   } catch (error) {
+    console.error('Error:', error);
     res.status(500).json({ error: 'Error al obtener ejercicios' });
   }
 });
@@ -112,11 +113,13 @@ app.get('/api/tips', async (req, res) => {
 });
 
 // ============================================
-// INICIAR SERVIDOR
+// INICIAR SERVIDOR (ESCUCHA EN TODAS LAS INTERFACES)
 // ============================================
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`[INFO] Servidor corriendo en puerto ${PORT}`);
-  console.log(`📍 http://localhost:${PORT}`);
+  console.log(`📍 Local: http://localhost:${PORT}`);
+  console.log(`📍 Red: http://192.168.100.14:${PORT}`);
   console.log(`🔐 Login: POST /api/login`);
   console.log(`📝 Registro: POST /api/register`);
+  console.log(`📋 Ejercicios: GET /api/exercises`);
 });

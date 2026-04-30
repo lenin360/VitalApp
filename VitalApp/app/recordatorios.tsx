@@ -75,7 +75,7 @@ export default function RecordatoriosScreen() {
                 {recordatorios.map((recordatorio) => (
                     <View key={recordatorio.id} style={styles.reminderCard}>
                         <View style={styles.reminderInfo}>
-                            <Text style={styles.reminderTime}>⏰ {recordatorio.hora}</Text>
+                            <Text style={styles.reminderTime}> {recordatorio.hora}</Text>
                             <View style={styles.diasContainer}>
                                 {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((dia) => (
                                     <View key={dia} style={[
@@ -100,7 +100,7 @@ export default function RecordatoriosScreen() {
                 ))}
 
                 <View style={styles.motivationCard}>
-                    <Text style={styles.motivationTitle}>💪 Consejo Vital</Text>
+                    <Text style={styles.motivationTitle}> Consejo Vital</Text>
                     <Text style={styles.motivationText}>
                         La constancia es la clave del éxito. Establece horarios fijos para tus ejercicios.
                     </Text>

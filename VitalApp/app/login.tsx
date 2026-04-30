@@ -13,6 +13,8 @@ import {
     ScrollView
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { API_URL } from './config';
+
 
 export default function LoginScreen() {
     const [email, setEmail] = useState('');
@@ -39,7 +41,7 @@ export default function LoginScreen() {
         setCargando(true);
         
         try {
-            const url = 'http://localhost:5000/api/login';
+            const url = `${API_URL}/login`;
             console.log('3. URL de petición:', url);
             
             const body = JSON.stringify({ email, password });
@@ -96,7 +98,7 @@ export default function LoginScreen() {
         setCargando(true);
         
         try {
-            const url = 'http://localhost:5000/api/register';
+            const url = `${API_URL}/register`;
             console.log('3. URL:', url);
             
             const body = JSON.stringify({ nombre, email, password, edad: parseInt(edad) });

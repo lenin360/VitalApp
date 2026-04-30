@@ -111,21 +111,21 @@ export default function DetalleEjercicioScreen() {
                 <View style={styles.gridRow}>
                     <View style={styles.gridCol}>
                         <View style={styles.infoCard}>
-                            <Text style={styles.infoCardEmoji}>📊</Text>
+                            <Text style={styles.infoCardEmoji}></Text>
                             <Text style={styles.infoCardNumber}>12</Text>
                             <Text style={styles.infoCardLabel}>veces realizado</Text>
                         </View>
                     </View>
                     <View style={styles.gridCol}>
                         <View style={styles.infoCard}>
-                            <Text style={styles.infoCardEmoji}>👍</Text>
+                            <Text style={styles.infoCardEmoji}></Text>
                             <Text style={styles.infoCardNumber}>45</Text>
                             <Text style={styles.infoCardLabel}>me gusta</Text>
                         </View>
                     </View>
                     <View style={styles.gridCol}>
                         <View style={styles.infoCard}>
-                            <Text style={styles.infoCardEmoji}>⭐</Text>
+                            <Text style={styles.infoCardEmoji}></Text>
                             <Text style={styles.infoCardNumber}>4.8</Text>
                             <Text style={styles.infoCardLabel}>calificación</Text>
                         </View>
@@ -134,7 +134,7 @@ export default function DetalleEjercicioScreen() {
 
                 {/* Descripción (card estilo Bootstrap) */}
                 <View style={styles.card}>
-                    <Text style={styles.cardTitle}>📝 Descripción</Text>
+                    <Text style={styles.cardTitle}> Descripción</Text>
                     <Text style={styles.cardText}>
                         {ejercicio.descripcion || 'Ejercicio diseñado especialmente para adultos mayores. Mejora tu movilidad y bienestar general.'}
                     </Text>
@@ -142,7 +142,7 @@ export default function DetalleEjercicioScreen() {
 
                 {/* Instrucciones (card estilo Bootstrap) */}
                 <View style={styles.card}>
-                    <Text style={styles.cardTitle}>📖 Instrucciones paso a paso</Text>
+                    <Text style={styles.cardTitle}> Instrucciones paso a paso</Text>
                     <View style={styles.instructionsList}>
                         <View style={styles.instructionItem}>
                             <View style={styles.instructionNumber}><Text style={styles.instructionNumberText}>1</Text></View>
@@ -169,7 +169,7 @@ export default function DetalleEjercicioScreen() {
 
                 {/* Beneficios (card estilo Bootstrap) */}
                 <View style={styles.card}>
-                    <Text style={styles.cardTitle}>✨ Beneficios</Text>
+                    <Text style={styles.cardTitle}> Beneficios</Text>
                     <View style={styles.benefitsGrid}>
                         <View style={styles.benefitItem}>
                             <Text style={styles.benefitIcon}>✓</Text>
@@ -192,7 +192,7 @@ export default function DetalleEjercicioScreen() {
 
                 {/* Precauciones (card con borde de advertencia) */}
                 <View style={[styles.card, styles.cardWarning]}>
-                    <Text style={styles.cardTitleWarning}>⚠️ Precauciones</Text>
+                    <Text style={styles.cardTitleWarning}> Precauciones</Text>
                     <Text style={styles.cardTextWarning}>
                         Si sientes dolor o molestia durante el ejercicio, detente inmediatamente y consulta con tu médico.
                     </Text>
@@ -211,7 +211,7 @@ export default function DetalleEjercicioScreen() {
 
                 {/* Botón secundario para compartir */}
                 <TouchableOpacity style={styles.btnSecondary}>
-                    <Text style={styles.btnSecondaryText}>📤 Compartir progreso</Text>
+                    <Text style={styles.btnSecondaryText}> Compartir progreso</Text>
                 </TouchableOpacity>
 
                 <View style={styles.bottomSpace} />
