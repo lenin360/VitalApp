@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import {
     View,
     Text,
@@ -10,11 +10,14 @@ import {
     Platform,
     Alert,
     ActivityIndicator,
-    ScrollView
+    ScrollView,
+    StatusBar
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from './config';
-
 
 export default function LoginScreen() {
     const [email, setEmail] = useState('');
@@ -33,7 +36,7 @@ export default function LoginScreen() {
         
         if (!email || !password) {
             console.log('2. Error: Campos vacíos');
-            Alert.alert('Campos incompletos', 'Ingresa tu correo y contraseña');
+            Alert.alert('Faltan datos', 'Por favor ingresa tu correo y contraseña para continuar.');
             return;
         }
 
@@ -63,20 +66,24 @@ export default function LoginScreen() {
             console.log('6. Datos recibidos:', data);
             
             if (data.success) {
-                console.log('7. ✅ LOGIN EXITOSO - Redirigiendo a /home');
-                Alert.alert('¡Bienvenido!', `Hola ${data.user?.nombre || 'Usuario'}`);
-                console.log('8. Ejecutando router.replace...');
+                console.log('7. ✅ LOGIN EXITOSO - Guardando datos y redirigiendo');
+                // Guardar datos del usuario en AsyncStorage para uso en toda la app
+                await AsyncStorage.setItem('userId', data.user.id.toString());
+                await AsyncStorage.setItem('userName', data.user.nombre || '');
+                await AsyncStorage.setItem('userEmail', data.user.email || '');
+                await AsyncStorage.setItem('userAge', (data.user.edad || '').toString());
+                await AsyncStorage.setItem('userPoints', (data.user.puntos || 0).toString());
                 router.replace('/home');
                 console.log('9. Router.replace ejecutado');
             } else {
                 console.log('7. ❌ LOGIN FALLIDO - Mensaje:', data.message);
-                Alert.alert('Error', data.message || 'Credenciales incorrectas');
+                Alert.alert('Acceso denegado', data.message || 'El correo o la contraseña no son correctos.');
             }
         } catch (error: any) {
             console.log('7. ❌ ERROR EN LA PETICIÓN:');
             console.log('   Mensaje:', error.message);
             console.log('   Error completo:', error);
-            Alert.alert('Error de conexión', `No se pudo conectar con el servidor\n${error.message}`);
+            Alert.alert('Error de conexión', `No pudimos conectarnos. Verifica tu internet e intenta de nuevo.\n${error.message}`);
         } finally {
             console.log('8. Finalizando, cargando = false');
             setCargando(false);
@@ -90,7 +97,7 @@ export default function LoginScreen() {
         
         if (!nombre || !email || !password || !edad) {
             console.log('2. Error: Campos incompletos');
-            Alert.alert('Campos incompletos', 'Completa todos los campos');
+            Alert.alert('Faltan datos', 'Por favor completa todos los campos para crear tu cuenta.');
             return;
         }
 
@@ -116,18 +123,18 @@ export default function LoginScreen() {
             
             if (data.success) {
                 console.log('7. ✅ REGISTRO EXITOSO');
-                Alert.alert('¡Registro exitoso!', 'Ahora puedes iniciar sesión');
+                Alert.alert('¡Cuenta creada!', 'Bienvenido a VitalApp. Ahora puedes iniciar sesión con tu correo y contraseña.', [{ text: 'Continuar' }]);
                 setIsRegistering(false);
                 setNombre('');
                 setEdad('');
                 setPassword('');
             } else {
                 console.log('7. ❌ REGISTRO FALLIDO:', data.message);
-                Alert.alert('Error', data.message || 'No se pudo registrar');
+                Alert.alert('Error al registrar', data.message || 'No se pudo crear la cuenta.');
             }
         } catch (error: any) {
             console.log('7. ❌ ERROR:', error.message);
-            Alert.alert('Error de conexión', 'No se pudo conectar con el servidor');
+            Alert.alert('Error de conexión', 'No pudimos conectarnos. Verifica tu internet e intenta de nuevo.');
         } finally {
             setCargando(false);
         }
@@ -136,102 +143,259 @@ export default function LoginScreen() {
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <KeyboardAvoidingView 
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={styles.container}
+            <StatusBar barStyle="light-content" backgroundColor="#1E3A8A" />
+            <LinearGradient
+                colors={['#1E3A8A', '#2563EB', '#F8FAFC']}
+                locations={[0, 0.4, 0.4]}
+                style={styles.gradientBackground}
             >
-                <ScrollView contentContainerStyle={styles.scrollContent}>
-                    <View style={styles.header}>
-                        <View style={styles.logoCircle}>
-                            <Text style={styles.logoText}>V</Text>
+                <KeyboardAvoidingView 
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.container}
+                >
+                    <ScrollView 
+                        contentContainerStyle={styles.scrollContent}
+                        showsVerticalScrollIndicator={false}
+                    >
+                        <View style={styles.header}>
+                            <View style={styles.logoCircle}>
+                                <Ionicons name="fitness" size={48} color="#2563EB" />
+                            </View>
+                            <Text style={styles.titulo}>VitalApp</Text>
+                            <Text style={styles.subtitulo}>Tu bienestar, cada día</Text>
                         </View>
-                        <Text style={styles.titulo}>Vital App</Text>
-                        <Text style={styles.subtitulo}>Bienestar para tu vida</Text>
-                    </View>
 
-                    <View style={styles.formContainer}>
-                        {isRegistering ? (
-                            <>
-                                <Text style={styles.label}>Nombre completo</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Tu nombre"
-                                    value={nombre}
-                                    onChangeText={setNombre}
-                                />
-
-                                <Text style={styles.label}>Edad</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="65"
-                                    keyboardType="numeric"
-                                    value={edad}
-                                    onChangeText={setEdad}
-                                />
-                            </>
-                        ) : null}
-
-                        <Text style={styles.label}>Correo electrónico</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="tu@email.com"
-                            value={email}
-                            onChangeText={setEmail}
-                            autoCapitalize="none"
-                            keyboardType="email-address"
-                        />
-
-                        <Text style={styles.label}>Contraseña</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="••••••••"
-                            secureTextEntry
-                            value={password}
-                            onChangeText={setPassword}
-                        />
-
-                        <TouchableOpacity 
-                            style={[styles.loginButton, cargando && styles.loginButtonDisabled]}
-                            onPress={isRegistering ? handleRegister : handleLogin}
-                            disabled={cargando}
-                        >
-                            {cargando ? (
-                                <ActivityIndicator color="#FFFFFF" />
-                            ) : (
-                                <Text style={styles.loginButtonText}>
-                                    {isRegistering ? 'Registrarse' : 'Iniciar sesión'}
-                                </Text>
-                            )}
-                        </TouchableOpacity>
-
-                        <TouchableOpacity onPress={() => setIsRegistering(!isRegistering)}>
-                            <Text style={styles.switchText}>
-                                {isRegistering 
-                                    ? '¿Ya tienes cuenta? Inicia sesión' 
-                                    : '¿No tienes cuenta? Regístrate'}
+                        <View style={styles.formContainer}>
+                            <Text style={styles.formTitle}>
+                                {isRegistering ? 'Crear Cuenta Nueva' : 'Inicia Sesión'}
                             </Text>
-                        </TouchableOpacity>
-                    </View>
-                </ScrollView>
-            </KeyboardAvoidingView>
+
+                            {isRegistering && (
+                                <>
+                                    <Text style={styles.label}>Nombre completo</Text>
+                                    <View style={styles.inputContainer}>
+                                        <Ionicons name="person-outline" size={20} color="#64748B" style={styles.inputIcon} />
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="Ej: Juan Pérez"
+                                            placeholderTextColor="#94A3B8"
+                                            value={nombre}
+                                            onChangeText={setNombre}
+                                        />
+                                    </View>
+
+                                    <Text style={styles.label}>Edad</Text>
+                                    <View style={styles.inputContainer}>
+                                        <Ionicons name="calendar-outline" size={20} color="#64748B" style={styles.inputIcon} />
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="Ej: 65"
+                                            placeholderTextColor="#94A3B8"
+                                            keyboardType="numeric"
+                                            value={edad}
+                                            onChangeText={setEdad}
+                                            maxLength={3}
+                                        />
+                                    </View>
+                                </>
+                            )}
+
+                            <Text style={styles.label}>Correo electrónico</Text>
+                            <View style={styles.inputContainer}>
+                                <Ionicons name="mail-outline" size={20} color="#64748B" style={styles.inputIcon} />
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="tu@correo.com"
+                                    placeholderTextColor="#94A3B8"
+                                    value={email}
+                                    onChangeText={setEmail}
+                                    autoCapitalize="none"
+                                    keyboardType="email-address"
+                                />
+                            </View>
+
+                            <Text style={styles.label}>Contraseña</Text>
+                            <View style={styles.inputContainer}>
+                                <Ionicons name="lock-closed-outline" size={20} color="#64748B" style={styles.inputIcon} />
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="••••••••"
+                                    placeholderTextColor="#94A3B8"
+                                    secureTextEntry
+                                    value={password}
+                                    onChangeText={setPassword}
+                                />
+                            </View>
+
+                            <TouchableOpacity 
+                                style={[styles.mainButton, cargando && styles.mainButtonDisabled]}
+                                onPress={isRegistering ? handleRegister : handleLogin}
+                                disabled={cargando}
+                                activeOpacity={0.8}
+                            >
+                                {cargando ? (
+                                    <ActivityIndicator color="#FFFFFF" size="large" />
+                                ) : (
+                                    <Text style={styles.mainButtonText}>
+                                        {isRegistering ? 'Crear mi cuenta' : 'Entrar'}
+                                    </Text>
+                                )}
+                            </TouchableOpacity>
+
+                            <TouchableOpacity 
+                                style={styles.switchContainer}
+                                onPress={() => setIsRegistering(!isRegistering)}
+                                activeOpacity={0.6}
+                            >
+                                <Text style={styles.switchText}>
+                                    {isRegistering 
+                                        ? '¿Ya tienes cuenta?' 
+                                        : '¿Eres nuevo aquí?'}
+                                </Text>
+                                <Text style={styles.switchTextBold}>
+                                    {isRegistering 
+                                        ? ' Inicia sesión' 
+                                        : ' Regístrate gratis'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </ScrollView>
+                </KeyboardAvoidingView>
+            </LinearGradient>
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: '#F8F9FA' },
-    container: { flex: 1 },
-    scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingVertical: 40, justifyContent: 'center' },
-    header: { alignItems: 'center', marginBottom: 48 },
-    logoCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-    logoText: { fontSize: 48, fontWeight: 'bold', color: '#FFFFFF' },
-    titulo: { fontSize: 32, fontWeight: 'bold', color: '#2C3E50', marginBottom: 8 },
-    subtitulo: { fontSize: 16, color: '#7F8C8D' },
-    formContainer: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 24 },
-    label: { fontSize: 14, fontWeight: '500', color: '#2C3E50', marginBottom: 8 },
-    input: { borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, marginBottom: 20 },
-    loginButton: { backgroundColor: '#4CAF50', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginBottom: 16 },
-    loginButtonDisabled: { opacity: 0.7 },
-    loginButtonText: { fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' },
-    switchText: { fontSize: 14, color: '#4CAF50', textAlign: 'center', marginTop: 8 },
+    safeArea: { 
+        flex: 1, 
+        backgroundColor: '#1E3A8A' 
+    },
+    gradientBackground: {
+        flex: 1,
+    },
+    container: { 
+        flex: 1,
+    },
+    scrollContent: { 
+        flexGrow: 1, 
+        paddingHorizontal: 24, 
+        paddingTop: 60,
+        paddingBottom: 40,
+    },
+    header: { 
+        alignItems: 'center', 
+        marginBottom: 40,
+    },
+    logoCircle: { 
+        width: 100, 
+        height: 100, 
+        borderRadius: 50, 
+        backgroundColor: '#FFFFFF', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        marginBottom: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.2,
+        shadowRadius: 16,
+        elevation: 10,
+    },
+    titulo: { 
+        fontSize: 42, 
+        fontWeight: '900', 
+        color: '#FFFFFF', 
+        marginBottom: 8,
+        letterSpacing: 1,
+    },
+    subtitulo: { 
+        fontSize: 18, 
+        color: '#DBEAFE',
+        fontWeight: '500',
+    },
+    formContainer: { 
+        backgroundColor: '#FFFFFF', 
+        borderRadius: 32, 
+        padding: 30,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+        elevation: 8,
+    },
+    formTitle: {
+        fontSize: 24,
+        fontWeight: '900',
+        color: '#1E293B',
+        marginBottom: 24,
+        textAlign: 'center',
+    },
+    label: { 
+        fontSize: 16, 
+        fontWeight: '700', 
+        color: '#475569', 
+        marginBottom: 8,
+        marginLeft: 4,
+    },
+    inputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1.5,
+        borderColor: '#E2E8F0',
+        borderRadius: 16,
+        backgroundColor: '#F8FAFC',
+        marginBottom: 20,
+        paddingHorizontal: 16,
+        height: 60,
+    },
+    inputIcon: {
+        marginRight: 12,
+    },
+    input: { 
+        flex: 1,
+        fontSize: 18,
+        color: '#1E293B',
+        fontWeight: '500',
+        height: '100%',
+    },
+    mainButton: { 
+        backgroundColor: '#2563EB', 
+        borderRadius: 16, 
+        height: 64,
+        justifyContent: 'center',
+        alignItems: 'center', 
+        marginTop: 12,
+        marginBottom: 24,
+        shadowColor: '#2563EB',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 6,
+    },
+    mainButtonDisabled: { 
+        backgroundColor: '#94A3B8',
+        shadowOpacity: 0,
+        elevation: 0,
+    },
+    mainButtonText: { 
+        fontSize: 20, 
+        fontWeight: '800', 
+        color: '#FFFFFF',
+    },
+    switchContainer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 12,
+    },
+    switchText: { 
+        fontSize: 16, 
+        color: '#64748B', 
+        fontWeight: '500',
+    },
+    switchTextBold: {
+        fontSize: 16,
+        color: '#2563EB',
+        fontWeight: '800',
+    }
 });

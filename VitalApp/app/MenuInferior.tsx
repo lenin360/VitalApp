@@ -2,11 +2,13 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useTheme } from './components/useTheme';
 
 export default function MenuInferior() {
   const router = useRouter();
   const pathname = usePathname();
   const { width } = useWindowDimensions();
+  const { colors } = useTheme();
   const isDesktop = width >= 768;
 
   const menuItems = [
@@ -43,22 +45,22 @@ export default function MenuInferior() {
   const isActive = (path: string) => pathname === path;
 
   return (
-    <View style={[styles.container, isDesktop && styles.desktopContainer]}>
+    <View style={[styles.container, isDesktop && styles.desktopContainer, { backgroundColor: colors.card, borderTopColor: colors.cardBorder }]}>
       {menuItems.map((item, index) => {
         const active = isActive(item.path);
-        const color = active ? '#FF6B35' : '#999999';
+        const color = active ? (colors.isDark ? '#60A5FA' : '#2563EB') : colors.textSecondary;
         
         return (
           <TouchableOpacity
             key={index}
             style={styles.menuItem}
-            onPress={() => router.replace(item.path)}
+            onPress={() => router.replace(item.path as any)}
           >
             {item.icon(color, active)}
             <Text style={[styles.menuText, { color }]}>
               {item.name}
             </Text>
-            {active && <View style={styles.activeIndicator} />}
+            {active && <View style={[styles.activeIndicator, { backgroundColor: color }]} />}
           </TouchableOpacity>
         );
       })}
@@ -71,33 +73,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFFFFF', // Este será sobreescrito por el style prop
     borderTopWidth: 1,
-    borderTopColor: '#E8E8E8',
-    paddingBottom: Platform.OS === 'ios' ? 25 : 8,
-    paddingTop: 8,
+    borderTopColor: '#E2E8F0', // Este será sobreescrito por el style prop
+    paddingBottom: Platform.OS === 'ios' ? 25 : 12,
+    paddingTop: 12,
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
     elevation: 8,
   },
   desktopContainer: {
     maxWidth: 500,
     alignSelf: 'center',
-    borderRadius: 25,
-    marginBottom: 20,
+    borderRadius: 30,
+    marginBottom: 24,
     marginHorizontal: 20,
     left: '50%',
     right: 'auto',
     transform: [{ translateX: -250 }],
     shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 10,
+    shadowRadius: 16,
+    elevation: 12,
   },
   menuItem: {
     alignItems: 'center',
@@ -107,16 +109,16 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   menuText: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
     marginTop: 4,
   },
   activeIndicator: {
     position: 'absolute',
-    top: -8,
-    width: 20,
-    height: 3,
-    backgroundColor: '#FF6B35',
+    top: -12,
+    width: 24,
+    height: 4,
+    backgroundColor: '#2563EB',
     borderRadius: 2,
   },
 });

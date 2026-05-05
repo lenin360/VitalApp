@@ -87,6 +87,53 @@ app.post('/api/register', async (req, res) => {
 });
 
 // ============================================
+// OBTENER PERFIL DE USUARIO
+// ============================================
+app.get('/api/user/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [rows] = await pool.query(
+            'SELECT id, nombre, email, edad, puntos FROM usuarios WHERE id = ?',
+            [id]
+        );
+        if (rows.length > 0) {
+            res.json({ success: true, user: rows[0] });
+        } else {
+            res.json({ success: false, message: 'Usuario no encontrado' });
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ success: false, message: 'Error del servidor' });
+    }
+});
+
+// ============================================
+// ACTUALIZAR PERFIL DE USUARIO
+// ============================================
+app.put('/api/user/:id', async (req, res) => {
+    const { id } = req.params;
+    const { nombre, email, edad } = req.body;
+    console.log('📝 Actualizar perfil ID:', id, { nombre, email, edad });
+
+    try {
+        const [result] = await pool.query(
+            'UPDATE usuarios SET nombre = ?, email = ?, edad = ? WHERE id = ?',
+            [nombre, email, edad, id]
+        );
+
+        if (result.affectedRows > 0) {
+            console.log('[INFO] Perfil actualizado');
+            res.json({ success: true, message: 'Perfil actualizado correctamente' });
+        } else {
+            res.json({ success: false, message: 'Usuario no encontrado' });
+        }
+    } catch (error) {
+        console.error('[ERROR] Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ============================================
 // EJERCICIOS
 // ============================================
 app.get('/api/exercises', async (req, res) => {
