@@ -8,14 +8,15 @@ import {
     ActivityIndicator,
     SafeAreaView,
     TextInput,
-    StatusBar
+    StatusBar,
+    Platform
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { API_URL } from './config';
-import MenuInferior from './MenuInferior';
-import { useTheme } from './components/useTheme';
+import { API_URL } from '../constants/config';
+import MenuInferior from '../components/MenuInferior';
+import { useTheme } from '../hooks/useTheme';
 
 interface Ejercicio {
     id: number;
@@ -24,6 +25,7 @@ interface Ejercicio {
     duracion: number;
     dificultad: string;
     categoria: string;
+    url: string;
 }
 
 export default function EjerciciosScreen() {
@@ -38,16 +40,30 @@ export default function EjerciciosScreen() {
         cargarEjercicios();
     }, []);
 
+    const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('Todas');
+
+    const categorias = ['Todas', 'Cardio', 'Zumba', 'Fuerza', 'Flexibilidad', 'Equilibrio', 'Movilidad', 'Silla', 'Relajación', 'Respiración', 'Pilates', 'Yoga'];
+
     useEffect(() => {
-        if (busqueda.trim() === '') {
-            setFiltrados(ejercicios);
-        } else {
-            const filtradosTemp = ejercicios.filter(e => 
-                e.nombre.toLowerCase().includes(busqueda.toLowerCase())
+        let filtradosTemp = ejercicios;
+        
+        // Filtrar por búsqueda
+        if (busqueda.trim() !== '') {
+            filtradosTemp = filtradosTemp.filter(e => 
+                e.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+                e.categoria.toLowerCase().includes(busqueda.toLowerCase())
             );
-            setFiltrados(filtradosTemp);
         }
-    }, [busqueda, ejercicios]);
+
+        // Filtrar por categoría
+        if (categoriaSeleccionada !== 'Todas') {
+            filtradosTemp = filtradosTemp.filter(e => 
+                e.categoria.toLowerCase() === categoriaSeleccionada.toLowerCase()
+            );
+        }
+
+        setFiltrados(filtradosTemp);
+    }, [busqueda, categoriaSeleccionada, ejercicios]);
 
     const cargarEjercicios = async () => {
         try {
@@ -57,12 +73,17 @@ export default function EjerciciosScreen() {
             setFiltrados(data.exercises || []);
         } catch (error) {
             console.error('Error:', error);
-            // Datos de prueba premium
+            // Datos de prueba premium extendidos
             const datosPrueba = [
-                { id: 1, nombre: 'Salto De Tijera', descripcion: 'Excelente ejercicio cardiovascular para despertar el cuerpo', duracion: 1800, dificultad: 'Normal', categoria: 'Cardio' },
-                { id: 2, nombre: 'Toque al Talón', descripcion: 'Fortalece piernas y glúteos suavemente', duracion: 900, dificultad: 'Fácil', categoria: 'Piernas' },
-                { id: 3, nombre: 'Abdominal Cruzado', descripcion: 'Trabaja el núcleo y mejora la postura', duracion: 1200, dificultad: 'Normal', categoria: 'Abdominales' },
-                { id: 4, nombre: 'Escalada Lenta', descripcion: 'Ejercicio completo para mantener la movilidad', duracion: 600, dificultad: 'Moderado', categoria: 'Movilidad' },
+                { id: 1, nombre: 'Zumba Gold: Ritmos Latinos', descripcion: 'Diviértete bailando ritmos suaves diseñados para tu energía', duracion: 1200, dificultad: 'Fácil', categoria: 'Zumba' },
+                { id: 2, nombre: 'Baile en Silla Alegre', descripcion: 'Mueve el cuerpo al compás de la música sin levantarte', duracion: 900, dificultad: 'Fácil', categoria: 'Zumba' },
+                { id: 3, nombre: 'Cardio Dance Pop', descripcion: 'Ejercítate con los mejores éxitos musicales de siempre', duracion: 1500, dificultad: 'Normal', categoria: 'Zumba' },
+                { id: 4, nombre: 'Salto De Tijera', descripcion: 'Excelente ejercicio cardiovascular para despertar el cuerpo', duracion: 1800, dificultad: 'Normal', categoria: 'Cardio' },
+                { id: 5, nombre: 'Toque al Talón', descripcion: 'Fortalece piernas y glúteos suavemente', duracion: 900, dificultad: 'Fácil', categoria: 'Fuerza' },
+                { id: 6, nombre: 'Abdominal Cruzado', descripcion: 'Trabaja el núcleo y mejora la postura', duracion: 1200, dificultad: 'Normal', categoria: 'Fuerza' },
+                { id: 7, nombre: 'Equilibrio en un pie', descripcion: 'Mejora tu estabilidad y evita caídas', duracion: 300, dificultad: 'Fácil', categoria: 'Equilibrio' },
+                { id: 8, nombre: 'Yoga en silla', descripcion: 'Estiramientos suaves sin levantarte', duracion: 600, dificultad: 'Fácil', categoria: 'Silla' },
+                { id: 9, nombre: 'Caminata rítmica', descripcion: 'Marcha al compás de la música', duracion: 1200, dificultad: 'Normal', categoria: 'Cardio' },
             ];
             setEjercicios(datosPrueba);
             setFiltrados(datosPrueba);
@@ -79,17 +100,38 @@ export default function EjerciciosScreen() {
                 nombre: ejercicio.nombre,
                 descripcion: ejercicio.descripcion || 'Sin descripción',
                 duracion: ejercicio.duracion.toString(),
-                dificultad: ejercicio.dificultad
+                dificultad: ejercicio.dificultad,
+                url: encodeURIComponent(ejercicio.url || '')
             }
         });
     };
 
     const getCategoryIcon = (categoria: string) => {
-        switch(categoria.toLowerCase()) {
+        switch((categoria || '').toLowerCase()) {
             case 'cardio': return 'heart-outline';
+            case 'zumba': return 'musical-notes-outline';
+            case 'fuerza': return 'barbell-outline';
+            case 'flexibilidad': return 'body-outline';
+            case 'estiramiento': return 'leaf-outline';
+            case 'equilibrio': return 'accessibility-outline';
+            case 'movilidad': return 'walk-outline';
+            case 'respiracion': return 'leaf-outline';
             case 'piernas': return 'walk-outline';
             case 'abdominales': return 'body-outline';
+            case 'silla': return 'person-outline';
             default: return 'fitness-outline';
+        }
+    };
+
+    const getDificultadColor = (dificultad: string) => {
+        switch((dificultad || '').toLowerCase()) {
+            case 'baja': return { bg: '#F0FDF4', text: '#16A34A' };
+            case 'media': return { bg: '#FEF9C3', text: '#CA8A04' };
+            case 'alta': return { bg: '#FEF2F2', text: '#DC2626' };
+            case 'moderado': return { bg: '#FEF9C3', text: '#CA8A04' };
+            case 'normal': return { bg: '#EFF6FF', text: '#2563EB' };
+            case 'fácil': return { bg: '#F0FDF4', text: '#16A34A' };
+            default: return { bg: '#F1F5F9', text: '#64748B' };
         }
     };
 
@@ -122,7 +164,6 @@ export default function EjerciciosScreen() {
                         <Text style={styles.countText}>{filtrados.length} rutinas</Text>
                     </View>
                 </View>
-                <Text style={styles.headerSubtitle}>Encuentra el ejercicio ideal para ti hoy</Text>
                 
                 <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
                     <Ionicons name="search" size={24} color={colors.textSecondary} style={styles.searchIcon} />
@@ -135,6 +176,33 @@ export default function EjerciciosScreen() {
                         clearButtonMode="while-editing"
                     />
                 </View>
+
+                {/* Filtro de Categorías */}
+                <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false} 
+                    style={styles.categoryScroll}
+                    contentContainerStyle={styles.categoryContent}
+                >
+                    {categorias.map((cat) => (
+                        <TouchableOpacity
+                            key={cat}
+                            style={[
+                                styles.categoryChip,
+                                categoriaSeleccionada === cat && styles.categoryChipActive,
+                                { backgroundColor: categoriaSeleccionada === cat ? '#FFFFFF' : 'rgba(255,255,255,0.15)' }
+                            ]}
+                            onPress={() => setCategoriaSeleccionada(cat)}
+                        >
+                            <Text style={[
+                                styles.categoryChipText,
+                                categoriaSeleccionada === cat && styles.categoryChipTextActive
+                            ]}>
+                                {cat}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
             </LinearGradient>
 
             <ScrollView 
@@ -177,21 +245,24 @@ export default function EjerciciosScreen() {
                             <View style={[styles.divider, { backgroundColor: colors.cardBorder }]} />
 
                             <View style={styles.ejercicioFooter}>
+                                {/* Tiempo */}
                                 <View style={[styles.footerBadge, { backgroundColor: colors.bg }]}>
                                     <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
                                     <Text style={[styles.footerText, { color: colors.textSecondary }]}>
                                         {Math.floor(ejercicio.duracion / 60)} min
                                     </Text>
                                 </View>
-                                <View style={[styles.footerBadge, { backgroundColor: colors.bg }]}>
-                                    <Ionicons name="bar-chart-outline" size={16} color={colors.isDark ? '#60A5FA' : '#2563EB'} />
-                                    <Text style={[styles.dificultad, { color: colors.isDark ? '#60A5FA' : '#2563EB' }]}>
+                                {/* Dificultad con color dinámico */}
+                                <View style={[styles.footerBadge, { backgroundColor: getDificultadColor(ejercicio.dificultad).bg }]}>
+                                    <Ionicons name="bar-chart-outline" size={16} color={getDificultadColor(ejercicio.dificultad).text} />
+                                    <Text style={[styles.dificultad, { color: getDificultadColor(ejercicio.dificultad).text }]}>
                                         {ejercicio.dificultad}
                                     </Text>
                                 </View>
+                                {/* Categoría sin texto redundante - solo ícono + nombre corto */}
                                 <View style={[styles.footerBadge, { backgroundColor: colors.bg }]}>
-                                    <Ionicons name="pricetag-outline" size={16} color={colors.textSecondary} />
-                                    <Text style={[styles.footerText, { color: colors.textSecondary }]}>
+                                    <Ionicons name={getCategoryIcon(ejercicio.categoria)} size={16} color={colors.textSecondary} />
+                                    <Text style={[styles.footerText, { color: colors.textSecondary }]} numberOfLines={1}>
                                         {ejercicio.categoria}
                                     </Text>
                                 </View>
@@ -226,14 +297,23 @@ const styles = StyleSheet.create({
     headerGradient: {
         paddingHorizontal: 24,
         paddingTop: 20,
-        paddingBottom: 30,
+        paddingBottom: 40,
         borderBottomLeftRadius: 32,
         borderBottomRightRadius: 32,
-        shadowColor: '#1E3A8A',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-        elevation: 8,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#1E3A8A',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.15,
+                shadowRadius: 16,
+            },
+            android: {
+                elevation: 8,
+            },
+            web: {
+                boxShadow: '0 8px 16px rgba(30, 58, 138, 0.15)',
+            }
+        }),
     },
     headerTop: {
         flexDirection: 'row',
@@ -270,11 +350,20 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         paddingHorizontal: 20,
         height: 60,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 5,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 5,
+            },
+            web: {
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+            }
+        }),
     },
     searchIcon: {
         marginRight: 12,
@@ -323,11 +412,20 @@ const styles = StyleSheet.create({
         borderRadius: 24, 
         padding: 20, 
         marginBottom: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 12,
-        elevation: 3,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.05,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 3,
+            },
+            web: {
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+            }
+        }),
         borderWidth: 1,
         borderColor: '#E2E8F0',
     },
@@ -384,5 +482,49 @@ const styles = StyleSheet.create({
     dificultad: { 
         fontSize: 14, 
         fontWeight: '700',
+    },
+    categoryScroll: {
+        marginTop: 10,
+        marginHorizontal: -24,
+    },
+    categoryContent: {
+        paddingLeft: 24,
+        paddingRight: 100, 
+        gap: 12,
+        alignItems: 'center',
+        paddingVertical: 12, // Give room for chips and shadows
+    },
+    categoryChip: {
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+    },
+    categoryChipActive: {
+        backgroundColor: '#FFFFFF',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 8,
+            },
+            android: {
+                elevation: 4,
+            },
+            web: {
+                boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
+            }
+        }),
+    },
+    categoryChipText: {
+        fontSize: 16, 
+        fontWeight: '700',
+        color: '#DBEAFE',
+    },
+    categoryChipTextActive: {
+        color: '#1E3A8A',
     },
 });

@@ -8,14 +8,15 @@ import {
     SafeAreaView,
     ActivityIndicator,
     Dimensions,
-    StatusBar
+    StatusBar,
+    Platform
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import MenuInferior from './MenuInferior';
-import { useTheme } from './components/useTheme';
+import MenuInferior from '../components/MenuInferior';
+import { useTheme } from '../hooks/useTheme';
 
 const { width } = Dimensions.get('window');
 
@@ -88,21 +89,27 @@ export default function EstadisticasScreen() {
 
             // Meta: totalGoal es la meta semanal, weeklyGoal es lo logrado
             const metaTotal = stats ? (stats.totalGoal || 3) : 3;
+            const hydrationStr = await AsyncStorage.getItem('userHydration');
+            const hydration = parseInt(hydrationStr || '0');
 
             // Calcular logros dinámicamente
             const logrosActualizados = [
-                { id: 1, nombre: 'Primer paso', icono: '🌟', desbloqueado: totalEjercicios >= 1, condicion: 1 },
-                { id: 2, nombre: '5 días seguidos', icono: '🔥', desbloqueado: racha >= 5, condicion: 5 },
-                { id: 3, nombre: '10 ejercicios', icono: '🎯', desbloqueado: totalEjercicios >= 10, condicion: 10 },
-                { id: 4, nombre: '25 ejercicios', icono: '💎', desbloqueado: totalEjercicios >= 25, condicion: 25 },
-                { id: 5, nombre: '50 ejercicios', icono: '👑', desbloqueado: totalEjercicios >= 50, condicion: 50 },
+                { id: 1, nombre: 'Primer paso', icono: '🌟', desbloqueado: totalEjercicios >= 1, condicion: 1, tipo: 'ejercicios' },
+                { id: 2, nombre: '5 días seguidos', icono: '🔥', desbloqueado: racha >= 5, condicion: 5, tipo: 'racha' },
+                { id: 3, nombre: '10 ejercicios', icono: '🎯', desbloqueado: totalEjercicios >= 10, condicion: 10, tipo: 'ejercicios' },
+                { id: 4, nombre: '25 ejercicios', icono: '💎', desbloqueado: totalEjercicios >= 25, condicion: 25, tipo: 'ejercicios' },
+                { id: 5, nombre: '50 ejercicios', icono: '👑', desbloqueado: totalEjercicios >= 50, condicion: 50, tipo: 'ejercicios' },
+                { id: 6, nombre: 'Hidratación Ideal', icono: '💧', desbloqueado: hydration >= 8, condicion: 8, tipo: 'hidratación' },
+                { id: 7, nombre: 'Maestro del Bienestar', icono: '🏆', desbloqueado: totalEjercicios >= 100, condicion: 100, tipo: 'ejercicios' },
+                { id: 8, nombre: 'Racha Dorada', icono: '✨', desbloqueado: racha >= 15, condicion: 15, tipo: 'racha' },
+                { id: 9, nombre: 'Súper Atleta', icono: '⚡', desbloqueado: totalEjercicios >= 75, condicion: 75, tipo: 'ejercicios' },
             ];
 
             setEstadisticas({
                 totalEjercicios: Math.max(metaTotal, totalEjercicios),
                 completados: totalEjercicios,
                 racha,
-                puntos: puntos + (totalEjercicios * 10),
+                puntos: puntos + (totalEjercicios * 10) + (hydration * 5),
                 calorias,
                 minutos,
                 progresoSemanal,
@@ -207,9 +214,15 @@ export default function EstadisticasScreen() {
                 {/* Tarjeta de Progreso General */}
                 <View style={[styles.progressCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
                     <View style={styles.progressHeader}>
-                        <View>
-                            <Text style={styles.progressTitle}>Meta Principal</Text>
-                            <Text style={styles.progressSubtitle}>Ejercicios completados</Text>
+                        <View style={styles.visualIndicator}>
+                            <Ionicons name="heart" size={32} color="#EF4444" />
+                            <View style={styles.pulseContainer}>
+                                <View style={styles.pulse} />
+                            </View>
+                        </View>
+                        <View style={{flex: 1, marginLeft: 16}}>
+                            <Text style={[styles.progressTitle, { color: colors.text }]}>Estado de Meta</Text>
+                            <Text style={[styles.progressSubtitle, { color: colors.textSecondary }]}>Sigue así, vas muy bien</Text>
                         </View>
                         <View style={styles.percentageCircle}>
                             <Text style={styles.percentageText}>{Math.round(porcentajeCompletado)}%</Text>
@@ -221,11 +234,6 @@ export default function EstadisticasScreen() {
                             colors={porcentajeCompletado >= 100 ? ['#059669', '#10B981'] : ['#2563EB', '#60A5FA']}
                             style={[styles.progressBar, { width: `${Math.min(porcentajeCompletado, 100)}%` }]}
                         />
-                    </View>
-                    
-                    <View style={styles.progressFooter}>
-                        <Text style={styles.progressTextDark}>{estadisticas.completados}</Text>
-                        <Text style={styles.progressTextLight}> de {estadisticas.totalEjercicios} completados</Text>
                     </View>
                 </View>
 
@@ -333,7 +341,7 @@ export default function EstadisticasScreen() {
                                         {logro.nombre}
                                     </Text>
                                     <Text style={styles.achievementStatus}>
-                                        {logro.desbloqueado ? '✅ Desbloqueado' : `Meta: ${logro.condicion} ejercicios`}
+                                        {logro.desbloqueado ? '✅ Desbloqueado' : `Meta: ${logro.condicion} ${logro.tipo === 'ejercicios' ? 'ejercicios' : (logro.tipo === 'racha' ? 'días seguidos' : 'vasos de agua')}`}
                                     </Text>
                                 </View>
                                 {logro.desbloqueado && (
@@ -359,19 +367,60 @@ const styles = StyleSheet.create({
     headerGradient: {
         paddingHorizontal: 24, paddingTop: 30, paddingBottom: 40,
         borderBottomLeftRadius: 32, borderBottomRightRadius: 32, marginBottom: 24,
-        shadowColor: '#1E3A8A', shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.15, shadowRadius: 16, elevation: 8,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#1E3A8A',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.15,
+                shadowRadius: 16,
+            },
+            android: {
+                elevation: 8,
+            },
+            web: {
+                boxShadow: '0 8px 16px rgba(30, 58, 138, 0.15)',
+            }
+        }),
     },
     headerTitle: { fontSize: 36, fontWeight: '900', color: '#FFFFFF', marginBottom: 8 },
     headerSubtitle: { fontSize: 18, color: '#DBEAFE', marginBottom: 28, fontWeight: '500', lineHeight: 24 },
     periodSelector: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, padding: 6 },
     periodButton: { flex: 1, paddingVertical: 12, borderRadius: 16, alignItems: 'center' },
-    periodButtonActive: { backgroundColor: '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+    periodButtonActive: { 
+        backgroundColor: '#FFFFFF', 
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+            },
+            android: {
+                elevation: 2,
+            },
+            web: {
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+            }
+        })
+    },
     periodText: { fontSize: 16, color: '#DBEAFE', fontWeight: '600' },
     periodTextActive: { color: '#1E3A8A', fontWeight: '800' },
-    progressCard: { 
+    progressCard: {
         backgroundColor: '#FFFFFF', marginHorizontal: 20, marginBottom: 20, padding: 24, borderRadius: 24,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.05,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 3,
+            },
+            web: {
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+            }
+        }),
         borderWidth: 1, borderColor: '#E2E8F0',
     },
     progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
@@ -382,12 +431,28 @@ const styles = StyleSheet.create({
     progressBarContainer: { height: 16, backgroundColor: '#F1F5F9', borderRadius: 8, overflow: 'hidden', marginBottom: 16 },
     progressBar: { height: '100%', borderRadius: 8 },
     progressFooter: { flexDirection: 'row', alignItems: 'baseline' },
-    progressTextDark: { fontSize: 24, fontWeight: '900', color: '#1E293B' },
-    progressTextLight: { fontSize: 16, color: '#64748B', fontWeight: '600' },
+  progressTextDark: { fontSize: 24, fontWeight: '900', color: '#1E293B' },
+  progressTextLight: { fontSize: 16, color: '#64748B', fontWeight: '600' },
+  visualIndicator: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  pulseContainer: { position: 'absolute', width: '100%', height: '100%', borderRadius: 30, borderWidth: 2, borderColor: '#EF4444', opacity: 0.3 },
+  pulse: { width: '100%', height: '100%', borderRadius: 30, backgroundColor: '#EF4444', opacity: 0.1 },
     statsGrid: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 20, gap: 16 },
-    statCard: { 
+    statCard: {
         flex: 1, backgroundColor: '#FFFFFF', padding: 24, borderRadius: 24, alignItems: 'center',
-        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.05,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 3,
+            },
+            web: {
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+            }
+        }),
         borderWidth: 1, borderColor: '#E2E8F0',
     },
     statIconWrapper: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
@@ -395,7 +460,20 @@ const styles = StyleSheet.create({
     statLabel: { fontSize: 15, color: '#64748B', fontWeight: '600', textAlign: 'center' },
     chartCard: { 
         backgroundColor: '#FFFFFF', marginHorizontal: 20, marginBottom: 20, padding: 24, borderRadius: 24,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.05,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 3,
+            },
+            web: {
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+            }
+        }),
         borderWidth: 1, borderColor: '#E2E8F0',
     },
     chartHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 24, gap: 12 },
@@ -409,7 +487,20 @@ const styles = StyleSheet.create({
     barLabelActive: { color: '#1E293B' },
     achievementsCard: { 
         backgroundColor: '#FFFFFF', marginHorizontal: 20, marginBottom: 24, padding: 24, borderRadius: 24,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.05,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 3,
+            },
+            web: {
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+            }
+        }),
         borderWidth: 1, borderColor: '#E2E8F0',
     },
     achievementsHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 12 },

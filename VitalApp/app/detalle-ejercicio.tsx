@@ -18,8 +18,9 @@ import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useTheme } from './components/useTheme';
-import VideoPlayer from './components/VideoPlayer';
+import { useTheme } from '../hooks/useTheme';
+import VideoPlayer from '../components/VideoPlayer';
+import { getVideoIdForExercise } from '../constants/exercises';
 
 const { width } = Dimensions.get('window');
 
@@ -32,7 +33,7 @@ export default function DetalleEjercicioScreen() {
     const [cargando, setCargando] = useState(true);
     const [segundosVistos, setSegundosVistos] = useState(0);
 
-    const TIEMPO_MINIMO = 20; // Segundos mínimos para completar
+
 
     // Soporte para seguimiento de tiempo en Web
     useEffect(() => {
@@ -54,11 +55,16 @@ export default function DetalleEjercicioScreen() {
         nombre: params.nombre || 'Ejercicio',
         descripcion: params.descripcion,
         duracion: parseInt(params.duracion as string) || 60,
-        dificultad: params.dificultad || 'Normal'
+        dificultad: params.dificultad || 'Normal',
+        url: decodeURIComponent(params.url as string || '')
     };
 
+    // Anti-trampa: requiere ver al menos 1/3 de la duración real del video
+    const TIEMPO_MINIMO = Math.max(15, Math.floor(ejercicio.duracion / 3));
+
+    const [celebrationVisible, setCelebrationVisible] = useState(false);
+
     const irAlSiguiente = () => {
-        // Verificar si se ha visto lo suficiente antes de avanzar automáticamente
         if (segundosVistos < TIEMPO_MINIMO) {
             console.log('Video terminado demasiado pronto, no se avanza automáticamente');
             return;
@@ -67,6 +73,7 @@ export default function DetalleEjercicioScreen() {
         if (routineData && currentIndex < routineData.exercises.length - 1) {
             const nextIndex = currentIndex + 1;
             const nextExercise = routineData.exercises[nextIndex];
+            const nextVideoId = nextExercise.url || getVideoIdForExercise(nextExercise.name);
             router.replace({
                 pathname: '/detalle-ejercicio',
                 params: {
@@ -75,6 +82,7 @@ export default function DetalleEjercicioScreen() {
                     descripcion: `Parte de la rutina: ${routineData.title}`,
                     duracion: '300',
                     dificultad: 'Fácil',
+                    url: encodeURIComponent(nextVideoId),
                     routine: JSON.stringify(routineData),
                     index: nextIndex.toString()
                 }
@@ -146,35 +154,32 @@ export default function DetalleEjercicioScreen() {
         }
 
         const isLast = routineData ? currentIndex === routineData.exercises.length - 1 : true;
-
-        Alert.alert(
-            'Registro guardado', 
-            isLast ? 'Has finalizado la rutina. El progreso ha sido guardado correctamente.' : 'Ejercicio finalizado. ¿Desea continuar con el siguiente?', 
-            [
-                { text: isLast ? 'Volver' : 'Continuar', onPress: irAlSiguiente }
-            ]
-        );
+        setCelebrationVisible(true);
+        
+        // El modal de celebración se encargará de avanzar o volver
     };
 
-    // Búsqueda inteligente de videos reales de ejercicios en español en YouTube
-    const getYouTubeId = (nombre: string) => {
-        // Normalizamos quitando acentos y mayúsculas para evitar errores
-        const n = nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const getYouTubeId = (url: string) => {
+        if (!url) return null;
+        const cleanUrl = url.trim();
+        if (cleanUrl.length === 11) return cleanUrl;
         
-        if (n.includes('respiracion')) return 'sr__uvpVWCE';
-        if (n.includes('cuello')) return 'HKbeLfkdhec';
-        if (n.includes('marcha')) return 'SG_IuD0g2yo';
-        if (n.includes('hombro')) return 'eE3XzQv6-Wc';
-        if (n.includes('extension') || n.includes('pierna')) return 'buDC4qUuTFk';
-        if (n.includes('elevacion') || n.includes('brazo')) return 'DsriajXRFJ4';
-        if (n.includes('tobillo')) return '_HCnd3AGM3I';
-        if (n.includes('estiramiento')) return 'eE3XzQv6-Wc';
+        // Expresión regular robusta para varios formatos
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+        const match = cleanUrl.match(regExp);
+        if (match && match[2].length === 11) {
+            return match[2];
+        }
         
-        // Video de gimnasia en silla extremadamente suave en español por defecto
-        return '_HCnd3AGM3I'; 
+        // Fallback manual si el regex falla
+        if (cleanUrl.includes('v=')) return cleanUrl.split('v=')[1].split('&')[0].substring(0, 11);
+        if (cleanUrl.includes('youtu.be/')) return cleanUrl.split('youtu.be/')[1].split('?')[0].substring(0, 11);
+        if (cleanUrl.includes('embed/')) return cleanUrl.split('embed/')[1].split('?')[0].substring(0, 11);
+        
+        return null;
     };
-    
-    const videoId = getYouTubeId(ejercicio.nombre as string);
+
+    const videoId = getYouTubeId(ejercicio.url) || getVideoIdForExercise(ejercicio.nombre);
 
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bg }]}>
@@ -191,19 +196,12 @@ export default function DetalleEjercicioScreen() {
 
             <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
                 
-                {/* Reproductor de Video */}
+                {/* Reproductor de Video Adaptable */}
                 <View style={styles.videoCard}>
                     <View style={styles.videoContainer}>
-                        <TouchableOpacity 
-                            style={styles.fullscreenBtn}
-                            onPress={() => setModalVisible(true)}
-                        >
-                            <Ionicons name="expand" size={20} color="#FFFFFF" />
-                        </TouchableOpacity>
-                        
                         {Platform.OS === 'web' ? (
                             <iframe
-                                src={`https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1`}
+                                src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&enablejsapi=1&origin=${typeof window !== 'undefined' ? window.location.origin : 'https://www.youtube.com'}`}
                                 style={{ width: '100%', height: '100%', border: 'none' }}
                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                                 allowFullScreen
@@ -243,15 +241,29 @@ export default function DetalleEjercicioScreen() {
                     </View>
                 </View>
 
-                {/* Métricas rápidas */}
+                {/* Métricas dinámicas reales */}
                 <View style={styles.metricsGrid}>
                     <View style={[styles.metricCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-                        <Text style={[styles.metricValue, { color: colors.isDark ? '#60A5FA' : '#1E3A8A' }]}>12</Text>
-                        <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Veces realizado</Text>
+                        <Text style={[styles.metricValue, { color: colors.isDark ? '#60A5FA' : '#1E3A8A' }]}>
+                            {ejercicio.duracion >= 60 
+                                ? `${Math.floor(ejercicio.duracion / 60)}:${String(ejercicio.duracion % 60).padStart(2, '0')}`
+                                : `${ejercicio.duracion}s`}
+                        </Text>
+                        <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Duración</Text>
                     </View>
                     <View style={[styles.metricCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-                        <Text style={[styles.metricValue, { color: colors.isDark ? '#60A5FA' : '#1E3A8A' }]}>45</Text>
-                        <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Calorías (est.)</Text>
+                        <Text style={[styles.metricValue, { color: colors.isDark ? '#60A5FA' : '#1E3A8A' }]}>
+                            {Math.max(5, Math.floor(ejercicio.duracion / 60) * 4)}
+                        </Text>
+                        <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Cal. estimadas</Text>
+                    </View>
+                    <View style={[styles.metricCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+                        <Text style={[styles.metricValue, { color: colors.isDark ? '#34D399' : '#059669', fontSize: 18 }]}>
+                            {Math.floor(TIEMPO_MINIMO / 60) > 0 
+                                ? `${Math.floor(TIEMPO_MINIMO / 60)}:${String(TIEMPO_MINIMO % 60).padStart(2, '0')}`
+                                : `${TIEMPO_MINIMO}s`}
+                        </Text>
+                        <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Mín. requerido</Text>
                     </View>
                 </View>
 
@@ -266,7 +278,7 @@ export default function DetalleEjercicioScreen() {
                     </Text>
                 </View>
 
-                {/* Paso a paso */}
+                {/* Paso a paso - Dinámico por tipo de ejercicio */}
                 <View style={[styles.contentSection, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
                     <View style={styles.sectionHeader}>
                         <Ionicons name="list" size={28} color="#2563EB" />
@@ -274,19 +286,73 @@ export default function DetalleEjercicioScreen() {
                     </View>
                     
                     <View style={styles.stepsContainer}>
-                        {[
-                            'Busca un espacio cómodo y seguro donde puedas moverte sin obstáculos.',
-                            'Sigue los movimientos del instructor en el video a tu propio ritmo.',
-                            'Respira profundamente y no contengas la respiración.',
-                            'Si sientes fatiga extrema, pausa el video y descansa.'
-                        ].map((paso, index) => (
-                            <View key={index} style={styles.stepItem}>
-                                <View style={[styles.stepNumberCircle, { backgroundColor: colors.settingIconBg }]}>
-                                    <Text style={[styles.stepNumberText, { color: colors.isDark ? '#60A5FA' : '#2563EB' }]}>{index + 1}</Text>
+                        {(() => {
+                            const n = (ejercicio.nombre || '').toLowerCase();
+                            let pasos = [
+                                'Busca un espacio cómodo y seguro donde puedas moverte sin obstáculos.',
+                                'Sigue los movimientos del instructor en el video a tu propio ritmo.',
+                                'Respira profundamente y no contengas la respiración.',
+                                'Si sientes fatiga extrema, pausa el video y descansa.'
+                            ];
+                            if (n.includes('respiraci') || n.includes('diafragm') || n.includes('meditaci')) {
+                                pasos = [
+                                    'Siéntate cómodamente con la espalda recta y los pies apoyados en el suelo.',
+                                    'Inhala lentamente por la nariz durante 4 segundos, llenando el abdomen.',
+                                    'Mantén el aire 2 segundos y exhala suavemente por la boca durante 6 segundos.',
+                                    'Repite el ciclo sin forzar. La calma llega con la práctica constante.'
+                                ];
+                            } else if (n.includes('hombro') || n.includes('círculo') || n.includes('circulo') || n.includes('cuello')) {
+                                pasos = [
+                                    'Siéntate o párate con la espalda recta y los hombros relajados.',
+                                    'Realiza círculos lentos con los hombros hacia atrás, luego hacia adelante.',
+                                    'Mueve la cabeza suavemente de lado a lado sin forzar el cuello.',
+                                    'Si sientes tensión excesiva, reduce el rango de movimiento.'
+                                ];
+                            } else if (n.includes('estiramiento') || n.includes('lateral') || n.includes('espalda') || n.includes('relaj')) {
+                                pasos = [
+                                    'Colócate en una posición cómoda, de pie o sentado.',
+                                    'Realiza el estiramiento suavemente, sin rebotes ni movimientos bruscos.',
+                                    'Mantén cada posición entre 15 y 30 segundos respirando con calma.',
+                                    'Nunca estires hasta sentir dolor; la sensación debe ser de tensión leve.'
+                                ];
+                            } else if (n.includes('caminata') || n.includes('marcha') || n.includes('paso') || n.includes('tobillo')) {
+                                pasos = [
+                                    'Párate cerca de una silla o pared por si necesitas apoyo.',
+                                    'Levanta las rodillas de forma alternada a un ritmo cómodo para ti.',
+                                    'Mantén la espalda erguida y los brazos moviéndose con naturalidad.',
+                                    'Regula tu velocidad según tu nivel de energía del día.'
+                                ];
+                            } else if (n.includes('equilibrio') || n.includes('sentadilla')) {
+                                pasos = [
+                                    'Párate frente a una silla robusta que puedas sujetar si pierdes el equilibrio.',
+                                    'Levanta un pie lentamente y mantén la posición el mayor tiempo posible.',
+                                    'Cambia de pie y repite. Con el tiempo irás mejorando la estabilidad.',
+                                    'No te frustres si al inicio es difícil; el equilibrio mejora con práctica.'
+                                ];
+                            } else if (n.includes('yoga') || n.includes('meditaci')) {
+                                pasos = [
+                                    'Prepara un espacio tranquilo y sin distracciones.',
+                                    'Sigue las posturas del video a tu propio ritmo, sin competir.',
+                                    'La respiración es clave: inhala al estirarte, exhala al relajarte.',
+                                    'Termina la sesión con unos minutos de quietud y gratitud.'
+                                ];
+                            } else if (n.includes('brazo') || n.includes('biceps') || n.includes('bíceps') || n.includes('pesas') || n.includes('curl') || n.includes('press') || n.includes('elevaci')) {
+                                pasos = [
+                                    'Usa pesas ligeras (0.5 a 1 kg). Si no tienes, usa botellas de agua.',
+                                    'Mantén los codos pegados al cuerpo durante todo el movimiento.',
+                                    'Sube el peso en 2 segundos y bájalo en 4 segundos de forma controlada.',
+                                    'Descansa 30 segundos entre cada serie. La forma es más importante que el peso.'
+                                ];
+                            }
+                            return pasos.map((paso, index) => (
+                                <View key={index} style={styles.stepItem}>
+                                    <View style={[styles.stepNumberCircle, { backgroundColor: colors.settingIconBg }]}>
+                                        <Text style={[styles.stepNumberText, { color: colors.isDark ? '#60A5FA' : '#2563EB' }]}>{index + 1}</Text>
+                                    </View>
+                                    <Text style={[styles.stepText, { color: colors.textSecondary }]}>{paso}</Text>
                                 </View>
-                                <Text style={[styles.stepText, { color: colors.textSecondary }]}>{paso}</Text>
-                            </View>
-                        ))}
+                            ));
+                        })()}
                     </View>
                 </View>
 
@@ -366,6 +432,57 @@ export default function DetalleEjercicioScreen() {
                     )}
                 </SafeAreaView>
             </Modal>
+
+            {/* Modal de Celebración - NUEVO */}
+            <Modal
+                visible={celebrationVisible}
+                transparent={true}
+                animationType="fade"
+            >
+                <View style={styles.celebrationOverlay}>
+                    <View style={[styles.celebrationCard, { backgroundColor: colors.card }]}>
+                        <LinearGradient
+                            colors={['#059669', '#10B981']}
+                            style={styles.celebrationHeader}
+                        >
+                            <Ionicons name="trophy" size={80} color="#FFFFFF" />
+                        </LinearGradient>
+                        
+                        <View style={styles.celebrationContent}>
+                            <Text style={[styles.celebrationTitle, { color: colors.text }]}>¡Excelente Trabajo!</Text>
+                            <Text style={[styles.celebrationSubtitle, { color: colors.textSecondary }]}>
+                                Has completado: {ejercicio.nombre}
+                            </Text>
+                            
+                            <View style={styles.statsRow}>
+                                <View style={styles.miniStat}>
+                                    <Text style={styles.miniStatValue}>+{Math.floor(ejercicio.duracion / 60)}</Text>
+                                    <Text style={styles.miniStatLabel}>Min</Text>
+                                </View>
+                                <View style={styles.miniStat}>
+                                    <Text style={styles.miniStatValue}>+{Math.max(5, Math.floor(ejercicio.duracion / 60) * 4)}</Text>
+                                    <Text style={styles.miniStatLabel}>Kcal</Text>
+                                </View>
+                            </View>
+
+                            <TouchableOpacity 
+                                style={styles.continueButton}
+                                onPress={() => {
+                                    setCelebrationVisible(false);
+                                    irAlSiguiente();
+                                }}
+                            >
+                                <Text style={styles.continueButtonText}>
+                                    {routineData && currentIndex < routineData.exercises.length - 1 
+                                        ? 'Siguiente Ejercicio' 
+                                        : 'Finalizar Rutina'}
+                                </Text>
+                                <Ionicons name="arrow-forward" size={24} color="#FFFFFF" />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -407,11 +524,20 @@ const styles = StyleSheet.create({
         borderRadius: 24,
         overflow: 'hidden',
         backgroundColor: '#000000',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-        elevation: 8,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.15,
+                shadowRadius: 16,
+            },
+            android: {
+                elevation: 8,
+            },
+            web: {
+                boxShadow: '0 8px 16px rgba(0, 0, 0, 0.15)',
+            }
+        }),
         marginBottom: 24,
     },
     videoContainer: {
@@ -485,11 +611,20 @@ const styles = StyleSheet.create({
         padding: 20,
         borderRadius: 20,
         alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 12,
-        elevation: 3,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.05,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 3,
+            },
+            web: {
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+            }
+        }),
         borderWidth: 1,
         borderColor: '#E2E8F0',
     },
@@ -510,11 +645,20 @@ const styles = StyleSheet.create({
         padding: 24,
         borderRadius: 24,
         marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 12,
-        elevation: 3,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.05,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 3,
+            },
+            web: {
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+            }
+        }),
         borderWidth: 1,
         borderColor: '#E2E8F0',
     },
@@ -589,15 +733,98 @@ const styles = StyleSheet.create({
         lineHeight: 26,
         fontWeight: '500',
     },
+    celebrationOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    celebrationCard: {
+        width: '100%',
+        maxWidth: 400,
+        borderRadius: 32,
+        overflow: 'hidden',
+        alignItems: 'center',
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+    },
+    celebrationHeader: {
+        width: '100%',
+        paddingVertical: 40,
+        alignItems: 'center',
+    },
+    celebrationContent: {
+        padding: 32,
+        alignItems: 'center',
+        width: '100%',
+    },
+    celebrationTitle: {
+        fontSize: 28,
+        fontWeight: '900',
+        textAlign: 'center',
+        marginBottom: 8,
+    },
+    celebrationSubtitle: {
+        fontSize: 18,
+        textAlign: 'center',
+        marginBottom: 24,
+    },
+    statsRow: {
+        flexDirection: 'row',
+        gap: 32,
+        marginBottom: 32,
+    },
+    miniStat: {
+        alignItems: 'center',
+    },
+    miniStatValue: {
+        fontSize: 24,
+        fontWeight: '900',
+        color: '#059669',
+    },
+    miniStatLabel: {
+        fontSize: 14,
+        color: '#64748B',
+        fontWeight: '700',
+    },
+    continueButton: {
+        backgroundColor: '#059669',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 18,
+        paddingHorizontal: 32,
+        borderRadius: 20,
+        width: '100%',
+        gap: 12,
+    },
+    continueButtonText: {
+        color: '#FFFFFF',
+        fontSize: 18,
+        fontWeight: '800',
+    },
     mainButton: {
         marginHorizontal: 20,
         borderRadius: 24,
         overflow: 'hidden',
-        shadowColor: '#2563EB',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.2,
-        shadowRadius: 16,
-        elevation: 6,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#2563EB',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.2,
+                shadowRadius: 16,
+            },
+            android: {
+                elevation: 6,
+            },
+            web: {
+                boxShadow: '0 8px 16px rgba(37, 99, 235, 0.2)',
+            }
+        }),
     },
     mainButtonSuccess: {
         shadowColor: '#059669',

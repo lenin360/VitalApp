@@ -18,6 +18,8 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import MenuInferior from '../components/MenuInferior';
+import { useTheme } from '../hooks/useTheme';
 
 interface Recordatorio {
     id: number;
@@ -29,6 +31,7 @@ interface Recordatorio {
 
 export default function RecordatoriosScreen() {
     const router = useRouter();
+    const { colors } = useTheme();
     const [cargando, setCargando] = useState(true);
     const [notificacionesActivas, setNotificacionesActivas] = useState(true);
     const [recordatorios, setRecordatorios] = useState<Recordatorio[]>([]);
@@ -335,6 +338,7 @@ export default function RecordatoriosScreen() {
                     </View>
                 </View>
             </Modal>
+            <MenuInferior />
         </SafeAreaView>
     );
 }
@@ -362,8 +366,20 @@ const styles = StyleSheet.create({
     globalCard: {
         backgroundColor: '#FFFFFF', margin: 20, padding: 20, borderRadius: 24,
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05, shadowRadius: 12, elevation: 3,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.05,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 3,
+            },
+            web: {
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+            }
+        }),
         borderWidth: 1, borderColor: '#E2E8F0',
     },
     globalInfo: { flexDirection: 'row', alignItems: 'center', gap: 16 },
@@ -380,8 +396,20 @@ const styles = StyleSheet.create({
     emptySubtext: { fontSize: 16, color: '#CBD5E1', marginTop: 4 },
     reminderCard: {
         backgroundColor: '#FFFFFF', marginHorizontal: 20, marginBottom: 16, padding: 20, borderRadius: 24,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05, shadowRadius: 12, elevation: 3,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.05,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 3,
+            },
+            web: {
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+            }
+        }),
         borderWidth: 1, borderColor: '#E2E8F0',
     },
     reminderCardInactive: { opacity: 0.6 },

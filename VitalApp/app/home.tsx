@@ -4,11 +4,12 @@ import {
   SafeAreaView, Dimensions, Alert, RefreshControl, StatusBar, Platform, TextInput
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, FontAwesome5, Entypo } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import MenuInferior from './MenuInferior';
-import { useTheme } from './components/useTheme';
+import MenuInferior from '../components/MenuInferior';
+import { useTheme } from '../hooks/useTheme';
+import { getVideoIdForExercise, DAILY_TIPS } from '../constants/exercises';
 
 const { width } = Dimensions.get('window');
 
@@ -29,6 +30,8 @@ export default function HomeScreen() {
   const [nombreUsuario, setNombreUsuario] = useState('Usuario');
   const [refreshing, setRefreshing] = useState(false);
   const [completadosHoy, setCompletadosHoy] = useState(0);
+  const [hydration, setHydration] = useState(0);
+  const [dailyTip, setDailyTip] = useState('');
 
   // Cargar datos cada vez que la pantalla tiene foco
   useFocusEffect(
@@ -55,6 +58,13 @@ export default function HomeScreen() {
       if (pesoGuardado) setPeso(parseFloat(pesoGuardado));
       if (nombreGuardado) setNombreUsuario(nombreGuardado);
       if (completadosHoyGuardados) setCompletadosHoy(parseInt(completadosHoyGuardados));
+      
+      const hydrationGuardado = await AsyncStorage.getItem('userHydration');
+      if (hydrationGuardado) setHydration(parseInt(hydrationGuardado));
+      
+      // Tip aleatorio basado en el día
+      const dayOfYear = Math.floor((new Date().getTime() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+      setDailyTip(DAILY_TIPS[dayOfYear % DAILY_TIPS.length]);
     } catch (error) {
       console.log('Error cargando datos:', error);
     }
@@ -95,6 +105,18 @@ export default function HomeScreen() {
     }
   };
 
+  const cambiarHydration = async (delta: number) => {
+    const nuevo = Math.max(0, Math.min(12, hydration + delta));
+    setHydration(nuevo);
+    await AsyncStorage.setItem('userHydration', nuevo.toString());
+  };
+
+  const cambiarPeso = async (delta: number) => {
+    const nuevo = Math.max(20, Math.min(250, peso + delta));
+    setPeso(nuevo);
+    await AsyncStorage.setItem('userWeight', nuevo.toString());
+  };
+
   const reiniciarProgreso = async () => {
     const statsIniciales = {
       exercises: 0,
@@ -112,13 +134,13 @@ export default function HomeScreen() {
     Alert.alert('Progreso reiniciado', 'El contador ha vuelto a cero.');
   };
 
-  // Rutinas del día - rotan según el día de la semana
+  // Rutinas del día - una diferente por cada día de la semana
   const allRoutines = [
     {
       title: 'RUTINA SUAVE MATUTINA',
       time: '25 min - 5 ejercicios',
       exercises: [
-        { name: 'Respiración Diafragmática', duration: '05:00', icon: 'air', color: '#1E40AF' },
+        { name: 'Respiración Diafragmática', duration: '05:00', icon: 'leaf', color: '#1E40AF' },
         { name: 'Círculos con Hombros', duration: '05:00', icon: 'refresh', color: '#0369A1' },
         { name: 'Estiramiento Lateral', duration: '05:00', icon: 'body', color: '#0F766E' },
         { name: 'Movimiento de Tobillos', duration: '05:00', icon: 'footsteps', color: '#047857' },
@@ -131,18 +153,18 @@ export default function HomeScreen() {
       exercises: [
         { name: 'Marcha en el Lugar', duration: '05:00', icon: 'walk', color: '#0F766E' },
         { name: 'Equilibrio en un Pie', duration: '05:00', icon: 'accessibility', color: '#7C3AED' },
-        { name: 'Sentadilla con Silla', duration: '05:00', icon: 'car', color: '#D97706' },
+        { name: 'Sentadilla con Silla', duration: '05:00', icon: 'fitness', color: '#D97706' },
         { name: 'Estiramiento de Espalda', duration: '05:00', icon: 'fitness', color: '#059669' }
       ]
     },
     {
-      title: 'FUERZA SUAVE',
+      title: 'FUERZA SUAVE DE BRAZOS',
       time: '20 min - 4 ejercicios',
       exercises: [
         { name: 'Elevación de Brazos', duration: '05:00', icon: 'barbell', color: '#2563EB' },
-        { name: 'Extensión de Pierna', duration: '05:00', icon: 'fitness', color: '#BE123C' },
+        { name: 'Curl de Bíceps', duration: '05:00', icon: 'barbell', color: '#7C3AED' },
         { name: 'Press contra Pared', duration: '05:00', icon: 'body', color: '#0369A1' },
-        { name: 'Curl de Bíceps', duration: '05:00', icon: 'barbell', color: '#7C3AED' }
+        { name: 'Extensión de Pierna', duration: '05:00', icon: 'fitness', color: '#BE123C' }
       ]
     },
     {
@@ -151,7 +173,7 @@ export default function HomeScreen() {
       exercises: [
         { name: 'Respiración Profunda', duration: '05:00', icon: 'leaf', color: '#059669' },
         { name: 'Yoga en Silla', duration: '05:00', icon: 'body', color: '#0F766E' },
-        { name: 'Meditación Guiada', duration: '05:00', icon: 'brain', color: '#6D28D9' }
+        { name: 'Meditación Guiada', duration: '05:00', icon: 'leaf', color: '#6D28D9' }
       ]
     },
     {
@@ -161,7 +183,28 @@ export default function HomeScreen() {
         { name: 'Caminata en el Lugar', duration: '05:00', icon: 'walk', color: '#2563EB' },
         { name: 'Paso Lateral', duration: '05:00', icon: 'footsteps', color: '#0D9488' },
         { name: 'Rodillas Arriba', duration: '05:00', icon: 'fitness', color: '#D97706' },
-        { name: 'Enfriamiento Suave', duration: '05:00', icon: 'leaf', color: '#059669' }
+        { name: 'Estiramiento Final', duration: '05:00', icon: 'leaf', color: '#059669' }
+      ]
+    },
+    {
+      title: 'ARTICULACIONES SANAS',
+      time: '25 min - 5 ejercicios',
+      exercises: [
+        { name: 'Círculos de Muñecas', duration: '05:00', icon: 'refresh', color: '#0891B2' },
+        { name: 'Movimiento de Hombros', duration: '05:00', icon: 'body', color: '#6D28D9' },
+        { name: 'Estiramiento de Cuello', duration: '05:00', icon: 'person', color: '#059669' },
+        { name: 'Rotación de Tobillos', duration: '05:00', icon: 'footsteps', color: '#D97706' },
+        { name: 'Relajación de Espalda', duration: '05:00', icon: 'leaf', color: '#BE123C' }
+      ]
+    },
+    {
+      title: 'PESAS LIGERAS',
+      time: '20 min - 4 ejercicios',
+      exercises: [
+        { name: 'Press de Pesas Ligeras', duration: '05:00', icon: 'barbell', color: '#2563EB' },
+        { name: 'Elevación Lateral de Brazos', duration: '05:00', icon: 'barbell', color: '#7C3AED' },
+        { name: 'Curl de Bíceps con Pesas', duration: '05:00', icon: 'barbell', color: '#BE123C' },
+        { name: 'Estiramiento Post-Ejercicio', duration: '05:00', icon: 'leaf', color: '#059669' }
       ]
     }
   ];
@@ -172,6 +215,9 @@ export default function HomeScreen() {
 
   // Recomendados: las OTRAS rutinas que NO son la del día
   const allDiscoveryWorkouts = [
+    { title: 'Zumba Gold Alegre', time: '15 min', intensity: 'Media', icon: 'musical-notes', color: '#BE123C', desc: 'Ritmos latinos divertidos para todos' },
+    { title: 'Baile en Silla', time: '10 min', intensity: 'Baja', icon: 'musical-note', color: '#7C3AED', desc: 'Música y movimiento sin levantarte' },
+    { title: 'Ritmo para el Alma', time: '12 min', intensity: 'Baja', icon: 'heart', color: '#F43F5E', desc: 'Baile suave con canciones clásicas' },
     { title: 'Despierta tu cuerpo', time: '15 min', intensity: 'Baja', icon: 'sunny', color: '#2563EB', desc: 'Activa tu cuerpo suavemente al despertar' },
     { title: 'Movilidad en silla', time: '20 min', intensity: 'Baja', icon: 'body', color: '#0D9488', desc: 'Ejercicios sentado para articulaciones' },
     { title: 'Prevención caídas', time: '10 min', intensity: 'Media', icon: 'shield-checkmark', color: '#D97706', desc: 'Mejora tu equilibrio y estabilidad' },
@@ -179,7 +225,11 @@ export default function HomeScreen() {
     { title: 'Fuerza suave brazos', time: '15 min', intensity: 'Media', icon: 'barbell', color: '#7C3AED', desc: 'Fortalece brazos y hombros sin riesgo' },
     { title: 'Circulación piernas', time: '20 min', intensity: 'Baja', icon: 'fitness', color: '#BE123C', desc: 'Activa la circulación en tus piernas' },
     { title: 'Flexibilidad total', time: '15 min', intensity: 'Baja', icon: 'body', color: '#0891B2', desc: 'Estiramientos completos para todo el cuerpo' },
-    { title: 'Postura y columna', time: '10 min', intensity: 'Baja', icon: 'accessibility', color: '#4F46E5', desc: 'Corrige tu postura con ejercicios suaves' }
+    { title: 'Postura y columna', time: '10 min', intensity: 'Baja', icon: 'accessibility', color: '#4F46E5', desc: 'Corrige tu postura con ejercicios suaves' },
+    { title: 'Core para mayores', time: '12 min', intensity: 'Media', icon: 'fitness', color: '#0F766E', desc: 'Fortalece tu zona media para mayor estabilidad' },
+    { title: 'Yoga relajante', time: '20 min', intensity: 'Baja', icon: 'leaf', color: '#6D28D9', desc: 'Posturas suaves para relajar mente y cuerpo' },
+    { title: 'Cardio en casa', time: '15 min', intensity: 'Media', icon: 'walk', color: '#2563EB', desc: 'Mejora tu salud cardiovascular sin impacto' },
+    { title: 'Manos y muñecas', time: '10 min', intensity: 'Baja', icon: 'hand-right', color: '#0369A1', desc: 'Ejercicios para mantener la agilidad manual' }
   ];
 
   // Rotar recomendados para que sean distintos cada día
@@ -208,9 +258,17 @@ export default function HomeScreen() {
   const irAPerfil = () => router.push('/perfil');
 
   const iniciarEntrenamiento = async () => {
-    // Registrar progreso y navegar al primer ejercicio de la rutina
-    await guardarProgreso();
     const primerEjercicio = currentWorkout.exercises[0];
+    
+    // Enriquecer cada ejercicio de la rutina con su URL de video correcta
+    const rutineConVideos = {
+      ...currentWorkout,
+      exercises: currentWorkout.exercises.map((ex: any) => ({
+        ...ex,
+        url: getVideoIdForExercise(ex.name)
+      }))
+    };
+
     router.push({
       pathname: '/detalle-ejercicio',
       params: {
@@ -219,11 +277,14 @@ export default function HomeScreen() {
         descripcion: `Parte de la rutina: ${currentWorkout.title}`,
         duracion: '300',
         dificultad: 'Fácil',
-        routine: JSON.stringify(currentWorkout),
+        url: encodeURIComponent(getVideoIdForExercise(primerEjercicio.name)),
+        routine: JSON.stringify(rutineConVideos),
         index: '0'
       }
     });
   };
+
+
 
   const verDetalleEjercicio = (ejercicio: any) => {
     router.push({
@@ -249,14 +310,6 @@ export default function HomeScreen() {
         dificultad: workout.intensity === 'Media' ? 'Normal' : 'Fácil'
       }
     });
-  };
-
-  const cambiarPeso = async (cambio: number) => {
-    const nuevoPeso = peso + cambio;
-    if (nuevoPeso > 0 && nuevoPeso < 300) {
-      setPeso(nuevoPeso);
-      await AsyncStorage.setItem('userWeight', nuevoPeso.toString());
-    }
   };
 
   const cerrarSesion = async () => {
@@ -356,6 +409,22 @@ export default function HomeScreen() {
           </View>
         </TouchableOpacity>
 
+        {/* Tip del Día - NUEVO */}
+        <View style={[styles.tipCard, { backgroundColor: colors.isDark ? '#1E293B' : '#EFF6FF', borderColor: colors.isDark ? '#334155' : '#DBEAFE' }]}>
+          <LinearGradient
+            colors={colors.isDark ? ['#1E293B', '#0F172A'] : ['#EFF6FF', '#DBEAFE']}
+            style={styles.tipGradient}
+          >
+            <View style={styles.tipIconContainer}>
+               <Entypo name="light-bulb" size={24} color="#D97706" />
+            </View>
+            <View style={styles.tipTextContainer}>
+              <Text style={[styles.tipTitle, { color: colors.text }]}>Consejo de bienestar</Text>
+              <Text style={[styles.tipText, { color: colors.textSecondary }]}>{dailyTip}</Text>
+            </View>
+          </LinearGradient>
+        </View>
+
         {/* Objetivo semanal */}
         <TouchableOpacity style={[styles.weeklyGoal, { backgroundColor: colors.card, borderColor: colors.cardBorder }]} onPress={irAEstadisticas} activeOpacity={0.9}>
           <View style={styles.goalHeader}>
@@ -383,6 +452,48 @@ export default function HomeScreen() {
             </View>
           </View>
         </TouchableOpacity>
+
+        {/* Desafío del Día - NUEVO */}
+        <View style={[styles.dailyChallengeCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <LinearGradient
+                colors={colors.isDark ? ['#1E1B4B', '#312E81'] : ['#EEF2FF', '#E0E7FF']}
+                style={styles.dailyChallengeGradient}
+            >
+                <View style={styles.challengeIconRow}>
+                    <View style={[styles.challengeIconCircle, { backgroundColor: '#4F46E5' }]}>
+                        <Ionicons name="flash" size={24} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.challengeTextGroup}>
+                        <Text style={[styles.challengeTitle, { color: colors.isDark ? '#E0E7FF' : '#1E1B4B' }]}>Desafío del Día</Text>
+                        <Text style={[styles.challengeDesc, { color: colors.isDark ? '#C7D2FE' : '#4338CA' }]}>
+                            {completadosHoy >= 2 ? '¡Desafío completado!' : 'Completa 2 rutinas hoy'}
+                        </Text>
+                    </View>
+                    {completadosHoy >= 2 && (
+                        <View style={styles.completedBadge}>
+                            <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+                        </View>
+                    )}
+                </View>
+                
+                <View style={styles.challengeProgressRow}>
+                    <View style={styles.challengeDots}>
+                        {[1, 2].map((i) => (
+                            <View 
+                                key={i} 
+                                style={[
+                                    styles.challengeDot, 
+                                    completadosHoy >= i ? { backgroundColor: '#4F46E5' } : { backgroundColor: colors.isDark ? '#4338CA' : '#C7D2FE' }
+                                ]} 
+                            />
+                        ))}
+                    </View>
+                    <Text style={[styles.challengeStatus, { color: colors.isDark ? '#C7D2FE' : '#4338CA' }]}>
+                        {Math.min(completadosHoy, 2)} / 2
+                    </Text>
+                </View>
+            </LinearGradient>
+        </View>
 
         {/* Plan del Día */}
         <View style={[styles.daySection, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
@@ -465,6 +576,43 @@ export default function HomeScreen() {
           </ScrollView>
         </View>
 
+        {/* Sección Diversión con Ritmo - NUEVO */}
+        <View style={[styles.funSection, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <View style={[styles.sectionHeader, { paddingHorizontal: 24 }]}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>¡Diversión con Ritmo! 💃</Text>
+            </View>
+            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary, paddingHorizontal: 24 }]}>Disfruta bailando mientras te cuidas</Text>
+            
+            <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false} 
+                style={styles.discoverScroll}
+                contentContainerStyle={styles.funScrollContent}
+            >
+                {allDiscoveryWorkouts.filter(w => w.icon.includes('musical') || w.icon === 'heart').map((workout, index) => (
+                    <TouchableOpacity 
+                        key={index} 
+                        style={[styles.funCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]} 
+                        activeOpacity={0.9}
+                        onPress={() => verDetalleWorkout(workout)}
+                    >
+                        <LinearGradient
+                            colors={['#F43F5E', '#E11D48']}
+                            style={styles.funCardHeader}
+                        >
+                            <Ionicons name={workout.icon as any} size={40} color="#FFFFFF" />
+                        </LinearGradient>
+                        <View style={styles.discoverCardBody}>
+                            <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={2}>{workout.title}</Text>
+                            <View style={styles.cardInfoRow}>
+                                <Text style={[styles.cardTime, { color: colors.textSecondary }]}>{workout.time} de pura alegría</Text>
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+                ))}
+            </ScrollView>
+        </View>
+
         {/* Rutina del Día */}
         <View style={[styles.todayWorkout, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
           <View style={styles.workoutHeader}>
@@ -508,42 +656,72 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Peso del usuario */}
-        <View style={[styles.userStats, { backgroundColor: colors.card, borderColor: colors.cardBorder, padding: 24 }]}>
-          <View style={styles.weightHeader}>
-            <MaterialCommunityIcons name="scale-bathroom" size={32} color="#0EA5E9" />
-            <Text style={[styles.userStatTitle, { color: colors.text }]}>Control de Peso</Text>
-          </View>
-          <View style={[styles.weightDisplay, { justifyContent: 'space-between', marginTop: 16 }]}>
-            <TouchableOpacity onPress={() => cambiarPeso(-1)} style={[styles.weightBtn, colors.isDark && { backgroundColor: '#334155' }]}>
-               <Ionicons name="remove" size={32} color={colors.isDark ? '#F1F5F9' : '#FFFFFF'} />
-            </TouchableOpacity>
-            
-            <View style={styles.weightCurrent}>
-              <TextInput 
-                style={[styles.weightNumber, { color: colors.isDark ? '#38BDF8' : '#0EA5E9' }]}
-                value={peso === 0 ? '' : peso.toString()}
-                onChangeText={async (text) => {
-                   if (text === '') {
-                      setPeso(0);
-                      return;
-                   }
-                   const num = parseInt(text);
-                   if (!isNaN(num) && num > 0 && num < 300) {
-                      setPeso(num);
-                      await AsyncStorage.setItem('userWeight', num.toString());
-                   }
-                }}
-                keyboardType="numeric"
-                maxLength={3}
-              />
-              <Text style={[styles.weightUnit, { color: colors.textSecondary }]}>kg</Text>
+        {/* Centro de Bienestar - UNIFICADO Y ÚTIL PARA ADULTOS MAYORES */}
+        <View style={[styles.wellnessSection, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <View style={styles.wellnessHeader}>
+                <View style={styles.wellnessTitleGroup}>
+                    <Ionicons name="medkit" size={28} color="#EF4444" />
+                    <Text style={[styles.wellnessTitle, { color: colors.text }]}>Centro de Bienestar</Text>
+                </View>
+                <TouchableOpacity onPress={() => router.push('/recordatorios')}>
+                    <Text style={styles.seeAllText}>Configurar</Text>
+                </TouchableOpacity>
+            </View>
+
+            <View style={styles.wellnessGrid}>
+                {/* Hidratación */}
+                <View style={[styles.wellnessItem, { backgroundColor: colors.isDark ? '#1E293B' : '#EFF6FF' }]}>
+                    <Ionicons name="water" size={32} color="#3B82F6" />
+                    <Text style={[styles.wellnessValue, { color: colors.text }]}>{hydration} / 8</Text>
+                    <Text style={[styles.wellnessLabel, { color: colors.textSecondary }]}>Vasos Agua</Text>
+                    <View style={styles.wellnessControls}>
+                        <TouchableOpacity onPress={() => cambiarHydration(-1)} style={styles.miniBtn}>
+                            <Ionicons name="remove" size={18} color="#3B82F6" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => cambiarHydration(1)} style={styles.miniBtn}>
+                            <Ionicons name="add" size={18} color="#3B82F6" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                {/* Recordatorios de Salud */}
+                <TouchableOpacity 
+                    style={[styles.wellnessItem, { backgroundColor: colors.isDark ? '#1E293B' : '#FEF2F2' }]}
+                    onPress={() => router.push('/recordatorios')}
+                >
+                    <Ionicons name="notifications-circle" size={32} color="#EF4444" />
+                    <Text style={[styles.wellnessValue, { color: colors.text }]}>Ver</Text>
+                    <Text style={[styles.wellnessLabel, { color: colors.textSecondary }]}>Medicinas</Text>
+                    <View style={[styles.miniBtn, { marginTop: 10, width: '80%' }]}>
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: '#EF4444' }}>ABRIR</Text>
+                    </View>
+                </TouchableOpacity>
+
+                {/* Control de Peso */}
+                <View style={[styles.wellnessItem, { backgroundColor: colors.isDark ? '#1E293B' : '#F0FDF4' }]}>
+                    <Ionicons name="scale" size={32} color="#10B981" />
+                    <Text style={[styles.wellnessValue, { color: colors.text }]}>{peso} kg</Text>
+                    <Text style={[styles.wellnessLabel, { color: colors.textSecondary }]}>Mi Peso</Text>
+                    <View style={styles.wellnessControls}>
+                        <TouchableOpacity onPress={() => cambiarPeso(-1)} style={styles.miniBtn}>
+                            <Ionicons name="remove" size={18} color="#10B981" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => cambiarPeso(1)} style={styles.miniBtn}>
+                            <Ionicons name="add" size={18} color="#10B981" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
             </View>
             
-            <TouchableOpacity onPress={() => cambiarPeso(1)} style={[styles.weightBtn, colors.isDark && { backgroundColor: '#334155' }]}>
-               <Ionicons name="add" size={32} color={colors.isDark ? '#F1F5F9' : '#FFFFFF'} />
-            </TouchableOpacity>
-          </View>
+            <View style={[styles.motivationCard, { marginTop: 20, marginHorizontal: 0, backgroundColor: colors.isDark ? '#1E293B' : '#FFFBEB' }]}>
+                <View style={styles.motivationHeader}>
+                    <Ionicons name="bulb" size={20} color="#D97706" />
+                    <Text style={[styles.motivationTitle, { fontSize: 14 }]}>Consejo de Salud</Text>
+                </View>
+                <Text style={[styles.motivationText, { fontSize: 13, lineHeight: 18 }]}>
+                    Recuerda que mantenerte hidratado ayuda a tu concentración y energía diaria. ¡Bebe un poco de agua ahora!
+                </Text>
+            </View>
         </View>
 
         {/* Botón cerrar sesión */}
@@ -570,8 +748,20 @@ const styles = StyleSheet.create({
   headerStats: {
     paddingHorizontal: 24, paddingBottom: 40, paddingTop: 20,
     borderBottomLeftRadius: 32, borderBottomRightRadius: 32,
-    shadowColor: '#1E3A8A', shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15, shadowRadius: 20, elevation: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#1E3A8A',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+      },
+      android: {
+        elevation: 8,
+      },
+      web: {
+        boxShadow: '0 10px 20px rgba(30, 58, 138, 0.15)',
+      }
+    }),
   },
   headerTitleRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24
@@ -589,8 +779,21 @@ const styles = StyleSheet.create({
   profileAvatarText: { fontSize: 24 },
   headerOverlay: { 
     flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#FFFFFF',
-    borderRadius: 24, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1, shadowRadius: 12, elevation: 5
+    borderRadius: 24, padding: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 5,
+      },
+      web: {
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+      }
+    }),
   },
   statIconCircle: {
     width: 48, height: 48, borderRadius: 24, backgroundColor: '#EFF6FF',
@@ -601,8 +804,22 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 13, color: '#64748B', fontWeight: '700', marginTop: 4 },
   motivationBanner: {
     marginHorizontal: 20, marginTop: -20, marginBottom: 20, borderRadius: 24,
-    backgroundColor: '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08, shadowRadius: 12, elevation: 4, borderWidth: 1, borderColor: '#F1F5F9'
+    backgroundColor: '#FFFFFF',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 4,
+      },
+      web: {
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+      }
+    }),
+    borderWidth: 1, borderColor: '#F1F5F9'
   },
   bannerContent: { flexDirection: 'row', alignItems: 'center', padding: 20 },
   bannerIconContainer: {
@@ -615,7 +832,20 @@ const styles = StyleSheet.create({
   bannerSubtitle: { fontSize: 16, color: '#475569', lineHeight: 22 },
   weeklyGoal: {
     backgroundColor: '#FFFFFF', padding: 24, marginHorizontal: 20, marginBottom: 16, borderRadius: 24,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 3,
+      },
+      web: {
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+      }
+    }),
     borderWidth: 1, borderColor: '#E2E8F0'
   },
   goalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
@@ -632,7 +862,20 @@ const styles = StyleSheet.create({
   progressFill: { height: '100%', borderRadius: 6 },
   daySection: {
     backgroundColor: '#FFFFFF', padding: 24, marginHorizontal: 20, marginBottom: 16, borderRadius: 24,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 3,
+      },
+      web: {
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+      }
+    }),
     borderWidth: 1, borderColor: '#E2E8F0'
   },
   dayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
@@ -649,7 +892,20 @@ const styles = StyleSheet.create({
   lockedDayText: { color: '#94A3B8' },
   discoverSection: {
     padding: 24, backgroundColor: '#FFFFFF', marginHorizontal: 20, marginBottom: 16, borderRadius: 24,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 3,
+      },
+      web: {
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+      }
+    }),
     borderWidth: 1, borderColor: '#E2E8F0'
   },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
@@ -672,7 +928,20 @@ const styles = StyleSheet.create({
   cardIntensity: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
   todayWorkout: {
     backgroundColor: '#FFFFFF', padding: 24, marginHorizontal: 20, marginBottom: 16, borderRadius: 24,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 3,
+      },
+      web: {
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+      }
+    }),
     borderWidth: 1, borderColor: '#E2E8F0'
   },
   workoutHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
@@ -693,7 +962,20 @@ const styles = StyleSheet.create({
   workoutStartText: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
   userStats: {
     backgroundColor: '#FFFFFF', padding: 24, marginHorizontal: 20, marginBottom: 20, borderRadius: 24,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 3,
+      },
+      web: {
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+      }
+    }),
     borderWidth: 1, borderColor: '#E2E8F0'
   },
   weightHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
@@ -714,7 +996,120 @@ const styles = StyleSheet.create({
   weightBtn: {
     width: 52, height: 52, borderRadius: 26, backgroundColor: '#0EA5E9',
     justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1, shadowRadius: 4, elevation: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+      web: {
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+      }
+    }),
+  },
+  tipCard: {
+    marginHorizontal: 20, marginBottom: 20, borderRadius: 24,
+    borderWidth: 1, overflow: 'hidden'
+  },
+  tipGradient: { padding: 20, flexDirection: 'row', alignItems: 'center' },
+  tipIconContainer: {
+    width: 48, height: 48, borderRadius: 24, backgroundColor: '#FEF3C7',
+    justifyContent: 'center', alignItems: 'center', marginRight: 16
+  },
+  tipTextContainer: { flex: 1 },
+  tipTitle: { fontSize: 16, fontWeight: '800', marginBottom: 2 },
+  tipText: { fontSize: 15, lineHeight: 20 },
+  wellnessSection: {
+    padding: 24, marginHorizontal: 20, marginBottom: 16, borderRadius: 24,
+    borderWidth: 1,
+  },
+  wellnessHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  wellnessTitleGroup: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  wellnessTitle: { fontSize: 20, fontWeight: '800' },
+  wellnessGrid: { flexDirection: 'row', gap: 12, justifyContent: 'space-between' },
+  wellnessItem: { flex: 1, padding: 16, borderRadius: 20, alignItems: 'center', gap: 4 },
+  wellnessValue: { fontSize: 18, fontWeight: '900', marginTop: 4 },
+  wellnessLabel: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  wellnessControls: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  miniBtn: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: '#FFFFFF',
+    justifyContent: 'center', alignItems: 'center',
+    ...Platform.select({
+      web: { boxShadow: '0 2px 4px rgba(0,0,0,0.1)' },
+      android: { elevation: 2 }
+    })
+  },
+  motivationCard: {
+    padding: 20, borderRadius: 20,
+    borderWidth: 1, borderColor: '#FEF3C7',
+  },
+  motivationHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  motivationTitle: { fontSize: 16, fontWeight: '800', color: '#B45309' },
+  motivationText: { fontSize: 14, color: '#92400E', lineHeight: 20, fontWeight: '500' },
+  dailyChallengeCard: {
+    marginHorizontal: 20, marginBottom: 16, borderRadius: 24,
+    overflow: 'hidden', borderWidth: 1
+  },
+  dailyChallengeGradient: { padding: 24 },
+  challengeIconRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  challengeIconCircle: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  challengeTextGroup: { flex: 1 },
+  challengeTitle: { fontSize: 20, fontWeight: '900', marginBottom: 2 },
+  challengeDesc: { fontSize: 16, fontWeight: '600' },
+  completedBadge: { marginLeft: 12 },
+  challengeProgressRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  challengeDots: { flexDirection: 'row', gap: 8 },
+  challengeDot: { width: 40, height: 8, borderRadius: 4 },
+  challengeStatus: { fontSize: 16, fontWeight: '800' },
+  funSection: {
+    paddingVertical: 24, marginBottom: 16, borderRadius: 24,
+    marginHorizontal: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 3,
+      },
+      web: {
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+      }
+    }),
+    borderWidth: 1,
+  },
+  funScrollContent: {
+    paddingHorizontal: 16,
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16
+  },
+  funCard: {
+    borderRadius: 20, marginRight: 16, width: 220,
+    borderWidth: 1, borderColor: '#E2E8F0', overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+      web: {
+        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
+      }
+    })
+  },
+  funCardHeader: {
+    height: 100, justifyContent: 'center', alignItems: 'center'
   },
 });

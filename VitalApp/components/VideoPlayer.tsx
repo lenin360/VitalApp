@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { View, StyleSheet, Dimensions, ActivityIndicator, Text } from 'react-native';
+import { View, StyleSheet, Dimensions, ActivityIndicator, Text, Linking, TouchableOpacity } from 'react-native';
 import YoutubePlayer from 'react-native-youtube-iframe';
+import { Ionicons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
@@ -13,21 +14,43 @@ interface VideoPlayerProps {
 }
 
 export default function VideoPlayer({ videoId, playing = true, onEnd, onProgress, onReady }: VideoPlayerProps) {
+    // Extraer ID si se pasa una URL completa
+    const getCleanId = (id: string) => {
+        if (!id) return '';
+        if (id.length === 11) return id;
+        
+        // Manejar varios formatos de URL de YouTube
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+        const match = id.match(regExp);
+        if (match && match[2].length === 11) {
+            return match[2];
+        }
+        
+        // Fallback para IDs que podrían tener parámetros pegados
+        if (id.includes('v=')) return id.split('v=')[1].split('&')[0].substring(0, 11);
+        if (id.includes('youtu.be/')) return id.split('youtu.be/')[1].split('?')[0].substring(0, 11);
+        if (id.includes('embed/')) return id.split('embed/')[1].split('?')[0].substring(0, 11);
+        
+        return id;
+    };
+    
+    const cleanId = getCleanId(videoId);
     const playerRef = useRef<any>(null);
     const [cargando, setCargando] = useState(true);
     const [error, setError] = useState(false);
 
     const onReadyInternal = useCallback(() => {
-        console.log('Video listo');
+        console.log('Video listo:', cleanId);
         setCargando(false);
         if (onReady) onReady();
-    }, [onReady]);
+    }, [onReady, cleanId]);
 
     const onError = useCallback((e: any) => {
-        console.error('Error en video:', e);
+        console.error('Error en video (' + cleanId + '):', e);
+        // Si el ID parece sospechoso (longitud != 11), marcar error
         setError(true);
         setCargando(false);
-    }, []);
+    }, [cleanId]);
 
     const onStateChange = useCallback((state: string) => {
         console.log('Estado del video:', state);
@@ -58,8 +81,17 @@ export default function VideoPlayer({ videoId, playing = true, onEnd, onProgress
     if (error) {
         return (
             <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>No se pudo cargar el video</Text>
-                <Text style={styles.errorSubtext}>ID: {videoId}</Text>
+                <Ionicons name="alert-circle" size={48} color="#FF3B30" />
+                <Text style={styles.errorText}>Video no disponible</Text>
+                <Text style={styles.errorSubtext}>ID: {cleanId || videoId}</Text>
+                
+                <TouchableOpacity 
+                    style={styles.openYoutubeBtn}
+                    onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${cleanId || videoId}`)}
+                >
+                    <Ionicons name="logo-youtube" size={20} color="#FFFFFF" />
+                    <Text style={styles.openYoutubeText}>Ver en YouTube</Text>
+                </TouchableOpacity>
             </View>
         );
     }
@@ -76,13 +108,19 @@ export default function VideoPlayer({ videoId, playing = true, onEnd, onProgress
                 ref={playerRef}
                 height={220}
                 width={width}
-                videoId={videoId}
+                videoId={cleanId}
                 play={playing}
                 onReady={onReadyInternal}
                 onError={onError}
                 onChangeState={onStateChange}
                 volume={50}
                 playbackRate={1}
+                webViewProps={{
+                    allowsFullscreenVideo: true,
+                    androidLayerType: 'hardware',
+                    // Configurar origin para evitar bloqueos de embedding
+                    origin: 'https://www.youtube.com',
+                }}
             />
         </View>
     );
@@ -122,5 +160,20 @@ const styles = StyleSheet.create({
     errorSubtext: {
         color: '#AAAAAA',
         fontSize: 12,
+        marginBottom: 16,
+    },
+    openYoutubeBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FF0000',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 12,
+        gap: 8,
+    },
+    openYoutubeText: {
+        color: '#FFFFFF',
+        fontWeight: '700',
+        fontSize: 14,
     },
 });

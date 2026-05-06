@@ -17,7 +17,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from './config';
+import { API_URL } from '../constants/config';
 
 export default function LoginScreen() {
     const [email, setEmail] = useState('');
@@ -25,6 +25,8 @@ export default function LoginScreen() {
     const [isRegistering, setIsRegistering] = useState(false);
     const [nombre, setNombre] = useState('');
     const [edad, setEdad] = useState('');
+    const [peso, setPeso] = useState('');
+    const [fechaNacimiento, setFechaNacimiento] = useState('');
     const [cargando, setCargando] = useState(false);
     const router = useRouter();
 
@@ -72,7 +74,8 @@ export default function LoginScreen() {
                 await AsyncStorage.setItem('userName', data.user.nombre || '');
                 await AsyncStorage.setItem('userEmail', data.user.email || '');
                 await AsyncStorage.setItem('userAge', (data.user.edad || '').toString());
-                await AsyncStorage.setItem('userPoints', (data.user.puntos || 0).toString());
+                await AsyncStorage.setItem('userWeight', (data.user.peso || '').toString());
+                await AsyncStorage.setItem('userGender', data.user.genero || '');
                 router.replace('/home');
                 console.log('9. Router.replace ejecutado');
             } else {
@@ -95,9 +98,9 @@ export default function LoginScreen() {
         console.log('========== INICIO DE REGISTRO ==========');
         console.log('1. Datos de registro:', { nombre, email, edad, password: password ? '***' : 'vacío' });
         
-        if (!nombre || !email || !password || !edad) {
+        if (!nombre || !email || !password || !fechaNacimiento || !peso) {
             console.log('2. Error: Campos incompletos');
-            Alert.alert('Faltan datos', 'Por favor completa todos los campos para crear tu cuenta.');
+            Alert.alert('Faltan datos', 'Por favor completa todos los campos (incluyendo peso y fecha de nacimiento) para crear tu cuenta.');
             return;
         }
 
@@ -108,7 +111,14 @@ export default function LoginScreen() {
             const url = `${API_URL}/register`;
             console.log('3. URL:', url);
             
-            const body = JSON.stringify({ nombre, email, password, edad: parseInt(edad) });
+            const body = JSON.stringify({ 
+                nombre, 
+                email, 
+                password, 
+                fecha_nacimiento: fechaNacimiento, 
+                peso: parseFloat(peso),
+                genero: 'Otro' // Por defecto
+            });
             console.log('4. Body:', body);
             
             const response = await fetch(url, {
@@ -127,6 +137,8 @@ export default function LoginScreen() {
                 setIsRegistering(false);
                 setNombre('');
                 setEdad('');
+                setPeso('');
+                setFechaNacimiento('');
                 setPassword('');
             } else {
                 console.log('7. ❌ REGISTRO FALLIDO:', data.message);
@@ -184,17 +196,28 @@ export default function LoginScreen() {
                                         />
                                     </View>
 
-                                    <Text style={styles.label}>Edad</Text>
+                                    <Text style={styles.label}>Fecha de Nacimiento</Text>
                                     <View style={styles.inputContainer}>
                                         <Ionicons name="calendar-outline" size={20} color="#64748B" style={styles.inputIcon} />
                                         <TextInput
                                             style={styles.input}
-                                            placeholder="Ej: 65"
+                                            placeholder="AAAA-MM-DD (Ej: 1955-05-20)"
+                                            placeholderTextColor="#94A3B8"
+                                            value={fechaNacimiento}
+                                            onChangeText={setFechaNacimiento}
+                                        />
+                                    </View>
+
+                                    <Text style={styles.label}>Peso (kg)</Text>
+                                    <View style={styles.inputContainer}>
+                                        <Ionicons name="fitness-outline" size={20} color="#64748B" style={styles.inputIcon} />
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="Ej: 75.5"
                                             placeholderTextColor="#94A3B8"
                                             keyboardType="numeric"
-                                            value={edad}
-                                            onChangeText={setEdad}
-                                            maxLength={3}
+                                            value={peso}
+                                            onChangeText={setPeso}
                                         />
                                     </View>
                                 </>
@@ -295,11 +318,20 @@ const styles = StyleSheet.create({
         justifyContent: 'center', 
         alignItems: 'center', 
         marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.2,
-        shadowRadius: 16,
-        elevation: 10,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.2,
+                shadowRadius: 16,
+            },
+            android: {
+                elevation: 10,
+            },
+            web: {
+                boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
+            }
+        }),
     },
     titulo: { 
         fontSize: 42, 
@@ -317,11 +349,20 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF', 
         borderRadius: 32, 
         padding: 30,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.1,
-        shadowRadius: 20,
-        elevation: 8,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.1,
+                shadowRadius: 20,
+            },
+            android: {
+                elevation: 8,
+            },
+            web: {
+                boxShadow: '0 10px 20px rgba(0, 0, 0, 0.1)',
+            }
+        }),
     },
     formTitle: {
         fontSize: 24,
@@ -366,11 +407,20 @@ const styles = StyleSheet.create({
         alignItems: 'center', 
         marginTop: 12,
         marginBottom: 24,
-        shadowColor: '#2563EB',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
-        shadowRadius: 12,
-        elevation: 6,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#2563EB',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.3,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 6,
+            },
+            web: {
+                boxShadow: '0 8px 12px rgba(37, 99, 235, 0.3)',
+            }
+        }),
     },
     mainButtonDisabled: { 
         backgroundColor: '#94A3B8',

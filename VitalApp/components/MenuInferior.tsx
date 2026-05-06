@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useTheme } from './components/useTheme';
+import { useTheme } from '../hooks/useTheme';
 
 export default function MenuInferior() {
   const router = useRouter();
@@ -73,20 +73,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF', // Este será sobreescrito por el style prop
+    backgroundColor: '#FFFFFF', 
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0', // Este será sobreescrito por el style prop
+    borderTopColor: '#E2E8F0', 
     paddingBottom: Platform.OS === 'ios' ? 25 : 12,
     paddingTop: 12,
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 8,
+      },
+      web: {
+        boxShadow: '0 -4px 12px rgba(0, 0, 0, 0.05)',
+      }
+    }),
   },
   desktopContainer: {
     maxWidth: 500,
@@ -97,9 +106,18 @@ const styles = StyleSheet.create({
     left: '50%',
     right: 'auto',
     transform: [{ translateX: -250 }],
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 12,
+    ...Platform.select({
+      ios: {
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
+      },
+      android: {
+        elevation: 12,
+      },
+      web: {
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
+      }
+    }),
   },
   menuItem: {
     alignItems: 'center',

@@ -10,15 +10,16 @@ import {
     Alert,
     ActivityIndicator,
     StatusBar,
-    Switch
+    Switch,
+    Platform
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import MenuInferior from './MenuInferior';
-import { API_URL } from './config';
-import { useTheme } from './components/useTheme';
+import MenuInferior from '../components/MenuInferior';
+import { API_URL } from '../constants/config';
+import { useTheme } from '../hooks/useTheme';
 
 export default function PerfilScreen() {
     const router = useRouter();
@@ -30,7 +31,7 @@ export default function PerfilScreen() {
         nombre: '',
         email: '',
         edad: '',
-        puntos: 0,
+        peso: '',
         ejerciciosCompletados: 0,
         rachaDias: 0
     });
@@ -70,7 +71,7 @@ export default function PerfilScreen() {
                 nombre: nombre || 'Usuario',
                 email: email || '',
                 edad: edad || '',
-                puntos: parseInt(puntos || '0'),
+                peso: await AsyncStorage.getItem('userWeight') || '',
                 ejerciciosCompletados: stats ? stats.exercises : 0,
                 rachaDias: parseInt(rachaStr || '0')
             });
@@ -106,7 +107,7 @@ export default function PerfilScreen() {
                         body: JSON.stringify({
                             nombre: usuario.nombre,
                             email: usuario.email,
-                            edad: parseInt(usuario.edad) || 0
+                            peso: parseFloat(usuario.peso) || 0
                         })
                     });
                     const data = await response.json();
@@ -257,10 +258,46 @@ export default function PerfilScreen() {
                         </View>
                         <View style={[styles.statDivider, { backgroundColor: colors.cardBorder }]} />
                         <View style={styles.statItem}>
-                            <Text style={[styles.statNumber, { color: '#059669' }]}>{usuario.puntos}</Text>
-                            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Puntos</Text>
+                            <Text style={[styles.statNumber, { color: '#059669' }]}>{usuario.peso || '--'}</Text>
+                            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Peso (kg)</Text>
                         </View>
                     </View>
+                </View>
+                
+                {/* Insignias Recientes - NUEVO */}
+                <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.cardBorder, paddingVertical: 20 }]}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                        <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Mis Insignias</Text>
+                        <TouchableOpacity onPress={() => router.push('/estadisticas')}>
+                            <Text style={{ color: '#2563EB', fontWeight: '700' }}>Ver todas</Text>
+                        </TouchableOpacity>
+                    </View>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -5 }}>
+                        <View style={styles.badgeItem}>
+                            <View style={[styles.badgeCircle, usuario.ejerciciosCompletados >= 1 ? { backgroundColor: '#FEF3C7' } : { backgroundColor: '#F1F5F9' }]}>
+                                <Text style={[styles.badgeEmoji, usuario.ejerciciosCompletados < 1 && { opacity: 0.3 }]}>🌟</Text>
+                            </View>
+                            <Text style={[styles.badgeLabel, { color: colors.textSecondary }]}>Inicio</Text>
+                        </View>
+                        <View style={styles.badgeItem}>
+                            <View style={[styles.badgeCircle, usuario.rachaDias >= 5 ? { backgroundColor: '#FEE2E2' } : { backgroundColor: '#F1F5F9' }]}>
+                                <Text style={[styles.badgeEmoji, usuario.rachaDias < 5 && { opacity: 0.3 }]}>🔥</Text>
+                            </View>
+                            <Text style={[styles.badgeLabel, { color: colors.textSecondary }]}>Constante</Text>
+                        </View>
+                        <View style={styles.badgeItem}>
+                            <View style={[styles.badgeCircle, usuario.ejerciciosCompletados >= 10 ? { backgroundColor: '#E0E7FF' } : { backgroundColor: '#F1F5F9' }]}>
+                                <Text style={[styles.badgeEmoji, usuario.ejerciciosCompletados < 10 && { opacity: 0.3 }]}>🎯</Text>
+                            </View>
+                            <Text style={[styles.badgeLabel, { color: colors.textSecondary }]}>Experto</Text>
+                        </View>
+                        <View style={styles.badgeItem}>
+                            <View style={[styles.badgeCircle, usuario.ejerciciosCompletados >= 25 ? { backgroundColor: '#D1FAE5' } : { backgroundColor: '#F1F5F9' }]}>
+                                <Text style={[styles.badgeEmoji, usuario.ejerciciosCompletados < 25 && { opacity: 0.3 }]}>👑</Text>
+                            </View>
+                            <Text style={[styles.badgeLabel, { color: colors.textSecondary }]}>Maestro</Text>
+                        </View>
+                    </ScrollView>
                 </View>
 
                 {/* Información Personal */}
@@ -301,18 +338,18 @@ export default function PerfilScreen() {
                     </View>
 
                     <View style={styles.inputGroup}>
-                        <Text style={[styles.label, { color: colors.textSecondary }]}>Edad (Años)</Text>
+                        <Text style={[styles.label, { color: colors.textSecondary }]}>Peso Actual (kg)</Text>
                         <TextInput
                             style={[
                                 styles.input,
                                 { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.inputText },
                                 !editando && { backgroundColor: colors.inputDisabledBg, color: colors.textSecondary }
                             ]}
-                            value={usuario.edad}
-                            onChangeText={(text) => setUsuario({ ...usuario, edad: text })}
+                            value={usuario.peso.toString()}
+                            onChangeText={(text) => setUsuario({ ...usuario, peso: text })}
                             editable={editando}
                             keyboardType="numeric"
-                            placeholder="65"
+                            placeholder="70.5"
                             placeholderTextColor="#94A3B8"
                         />
                     </View>
@@ -427,11 +464,20 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingVertical: 10,
         borderRadius: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+            },
+            android: {
+                elevation: 2,
+            },
+            web: {
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+            }
+        }),
         minWidth: 100,
         justifyContent: 'center',
     },
@@ -457,11 +503,20 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 4,
         borderColor: '#93C5FD',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.2,
-        shadowRadius: 16,
-        elevation: 8,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.2,
+                shadowRadius: 16,
+            },
+            android: {
+                elevation: 8,
+            },
+            web: {
+                boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
+            }
+        }),
     },
     avatarText: { 
         fontSize: 48, 
@@ -499,11 +554,20 @@ const styles = StyleSheet.create({
         borderRadius: 24, 
         marginTop: -30,
         marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.08,
-        shadowRadius: 16,
-        elevation: 5,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.08,
+                shadowRadius: 16,
+            },
+            android: {
+                elevation: 5,
+            },
+            web: {
+                boxShadow: '0 8px 16px rgba(0, 0, 0, 0.08)',
+            }
+        }),
         borderWidth: 1,
         borderColor: '#E2E8F0',
     },
@@ -538,11 +602,20 @@ const styles = StyleSheet.create({
         padding: 24, 
         borderRadius: 24, 
         marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 12,
-        elevation: 3,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.05,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 3,
+            },
+            web: {
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+            }
+        }),
         borderWidth: 1,
         borderColor: '#E2E8F0',
     },
@@ -610,5 +683,28 @@ const styles = StyleSheet.create({
         fontSize: 18, 
         fontWeight: '800',
         marginLeft: 12,
+    },
+    badgeItem: {
+        alignItems: 'center',
+        marginHorizontal: 10,
+        width: 80,
+    },
+    badgeCircle: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+    },
+    badgeEmoji: {
+        fontSize: 28,
+    },
+    badgeLabel: {
+        fontSize: 12,
+        fontWeight: '700',
+        textAlign: 'center',
     },
 });
