@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, 
-  SafeAreaView, Dimensions, Alert, RefreshControl, StatusBar, Platform, TextInput
+  SafeAreaView, Dimensions, Alert, RefreshControl, StatusBar, Platform
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5, Entypo } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import MenuInferior from '../components/MenuInferior';
 import { useTheme } from '../hooks/useTheme';
 import { getVideoIdForExercise, DAILY_TIPS } from '../constants/exercises';
+import { API_URL } from '../constants/config';
 
 const { width } = Dimensions.get('window');
 
@@ -28,6 +29,7 @@ export default function HomeScreen() {
   });
   const [peso, setPeso] = useState(58);
   const [nombreUsuario, setNombreUsuario] = useState('Usuario');
+  const [userId, setUserId] = useState<string | null>(null);   // id_usuario de la BD
   const [refreshing, setRefreshing] = useState(false);
   const [completadosHoy, setCompletadosHoy] = useState(0);
   const [hydration, setHydration] = useState(0);
@@ -42,28 +44,46 @@ export default function HomeScreen() {
 
   const cargarDatosUsuario = async () => {
     try {
-      const statsGuardadas = await AsyncStorage.getItem('userStats');
-      const pesoGuardado = await AsyncStorage.getItem('userWeight');
-      const nombreGuardado = await AsyncStorage.getItem('userName');
+      const statsGuardadas    = await AsyncStorage.getItem('userStats');
+      const nombreGuardado    = await AsyncStorage.getItem('userName');
+      const userIdGuardado    = await AsyncStorage.getItem('userId');       // PK: id_usuario
       const completadosHoyGuardados = await AsyncStorage.getItem('completadosHoy');
-      
+
       if (statsGuardadas) {
         const stats = JSON.parse(statsGuardadas);
         setWeeklyStats(stats);
-        const porcentaje = stats.totalGoal > 0 
-          ? Math.round((stats.weeklyGoal / stats.totalGoal) * 100) 
+        const porcentaje = stats.totalGoal > 0
+          ? Math.round((stats.weeklyGoal / stats.totalGoal) * 100)
           : 0;
         setProgressPercentage(porcentaje);
       }
-      if (pesoGuardado) setPeso(parseFloat(pesoGuardado));
-      if (nombreGuardado) setNombreUsuario(nombreGuardado);
+      if (nombreGuardado)    setNombreUsuario(nombreGuardado);
+      if (userIdGuardado)    setUserId(userIdGuardado);
       if (completadosHoyGuardados) setCompletadosHoy(parseInt(completadosHoyGuardados));
-      
+
+      // Peso: se obtiene del backend con el id_usuario real
+      if (userIdGuardado) {
+        try {
+          const res = await fetch(`${API_URL}/user/${userIdGuardado}`);
+          const data = await res.json();
+          if (data.success && data.user?.peso) {
+            setPeso(parseFloat(data.user.peso));
+            await AsyncStorage.setItem('userWeight', data.user.peso.toString());
+          }
+        } catch (_) {
+          // Sin conexión: intentar valor cacheado
+          const pesoGuardado = await AsyncStorage.getItem('userWeight');
+          if (pesoGuardado) setPeso(parseFloat(pesoGuardado));
+        }
+      }
+
       const hydrationGuardado = await AsyncStorage.getItem('userHydration');
       if (hydrationGuardado) setHydration(parseInt(hydrationGuardado));
-      
+
       // Tip aleatorio basado en el día
-      const dayOfYear = Math.floor((new Date().getTime() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+      const dayOfYear = Math.floor(
+        (new Date().getTime() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000
+      );
       setDailyTip(DAILY_TIPS[dayOfYear % DAILY_TIPS.length]);
     } catch (error) {
       console.log('Error cargando datos:', error);
@@ -76,28 +96,47 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  const guardarProgreso = async () => {
+  const guardarProgreso = async (idVideo: number = 1, duracionSegundos: number = 300, caloriasQuemadas: number = 150) => {
     const nuevasStats = {
       ...weeklyStats,
       exercises: weeklyStats.exercises + 1,
-      calories: weeklyStats.calories + 150,
-      minutes: weeklyStats.minutes + 10,
+      calories: weeklyStats.calories + caloriasQuemadas,
+      minutes: weeklyStats.minutes + Math.round(duracionSegundos / 60),
       weeklyGoal: Math.min(weeklyStats.weeklyGoal + 1, weeklyStats.totalGoal)
     };
-    
-    const nuevoPorcentaje = nuevasStats.totalGoal > 0 
-      ? Math.round((nuevasStats.weeklyGoal / nuevasStats.totalGoal) * 100) 
+
+    const nuevoPorcentaje = nuevasStats.totalGoal > 0
+      ? Math.round((nuevasStats.weeklyGoal / nuevasStats.totalGoal) * 100)
       : 0;
-    
+
     const nuevosCompletados = completadosHoy + 1;
-    
+
     setWeeklyStats(nuevasStats);
     setProgressPercentage(nuevoPorcentaje);
     setCompletadosHoy(nuevosCompletados);
-    
+
     await AsyncStorage.setItem('userStats', JSON.stringify(nuevasStats));
     await AsyncStorage.setItem('completadosHoy', nuevosCompletados.toString());
-    
+
+    // Registrar en la BD — tabla ejercicio_realizado
+    if (userId) {
+      try {
+        await fetch(`${API_URL}/ejercicio-realizado`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id_usuario: parseInt(userId),
+            id_video: idVideo,
+            duracion_segundos: duracionSegundos,
+            calorias_quemadas: caloriasQuemadas,
+            completado: 1
+          })
+        });
+      } catch (e) {
+        console.log('No se pudo registrar ejercicio en BD:', e);
+      }
+    }
+
     if (nuevasStats.weeklyGoal >= nuevasStats.totalGoal) {
       setTimeout(() => {
         Alert.alert('FELICIDADES', 'Has completado el objetivo semanal.');
@@ -115,6 +154,19 @@ export default function HomeScreen() {
     const nuevo = Math.max(20, Math.min(250, peso + delta));
     setPeso(nuevo);
     await AsyncStorage.setItem('userWeight', nuevo.toString());
+
+    // Sincronizar con la BD — tabla usuario, campo peso
+    if (userId) {
+      try {
+        await fetch(`${API_URL}/user/${userId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ peso: nuevo })
+        });
+      } catch (e) {
+        console.log('No se pudo actualizar peso en BD:', e);
+      }
+    }
   };
 
   const reiniciarProgreso = async () => {
@@ -259,8 +311,7 @@ export default function HomeScreen() {
 
   const iniciarEntrenamiento = async () => {
     const primerEjercicio = currentWorkout.exercises[0];
-    
-    // Enriquecer cada ejercicio de la rutina con su URL de video correcta
+
     const rutineConVideos = {
       ...currentWorkout,
       exercises: currentWorkout.exercises.map((ex: any) => ({
@@ -272,7 +323,7 @@ export default function HomeScreen() {
     router.push({
       pathname: '/detalle-ejercicio',
       params: {
-        id: '1',
+        id: userId ?? '',                          // id_usuario real de la BD
         nombre: primerEjercicio.name,
         descripcion: `Parte de la rutina: ${currentWorkout.title}`,
         duracion: '300',
@@ -290,7 +341,7 @@ export default function HomeScreen() {
     router.push({
       pathname: '/detalle-ejercicio',
       params: {
-        id: '1',
+        id: userId ?? '',                          // id_usuario real de la BD
         nombre: ejercicio.name,
         descripcion: `Ejercicio de la rutina ${currentWorkout.title}. Diseñado para cuidar tus articulaciones.`,
         duracion: '300',
@@ -303,7 +354,7 @@ export default function HomeScreen() {
     router.push({
       pathname: '/detalle-ejercicio',
       params: {
-        id: '1',
+        id: userId ?? '',                          // id_usuario real de la BD
         nombre: workout.title,
         descripcion: workout.desc || 'Rutina recomendada especialmente para ti.',
         duracion: (parseInt(workout.time) * 60).toString(),
@@ -313,10 +364,25 @@ export default function HomeScreen() {
   };
 
   const cerrarSesion = async () => {
+    const limpiarStorage = async () => {
+      // Eliminar todas las claves guardadas por el login y la app
+      await Promise.all([
+        AsyncStorage.removeItem('userId'),
+        AsyncStorage.removeItem('userName'),
+        AsyncStorage.removeItem('userEmail'),
+        AsyncStorage.removeItem('userAge'),
+        AsyncStorage.removeItem('userRol'),
+        AsyncStorage.removeItem('userWeight'),
+        AsyncStorage.removeItem('userStats'),
+        AsyncStorage.removeItem('completadosHoy'),
+        AsyncStorage.removeItem('userHydration'),
+      ]);
+      router.replace('/login');
+    };
+
     if (Platform.OS === 'web') {
       if (window.confirm('¿Deseas salir de la aplicación?')) {
-        await AsyncStorage.removeItem('userSession');
-        router.replace('/login');
+        await limpiarStorage();
       }
     } else {
       Alert.alert(
@@ -324,13 +390,10 @@ export default function HomeScreen() {
         '¿Deseas salir de la aplicación?',
         [
           { text: 'Cancelar', style: 'cancel' },
-          { 
-            text: 'Sí, Salir', 
+          {
+            text: 'Sí, Salir',
             style: 'destructive',
-            onPress: async () => {
-              await AsyncStorage.removeItem('userSession');
-              router.replace('/login');
-            }
+            onPress: limpiarStorage
           }
         ]
       );
