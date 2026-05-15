@@ -20,132 +20,150 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../constants/config';
 
 export default function LoginScreen() {
+    // --- Login ---
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isRegistering, setIsRegistering] = useState(false);
-    const [nombre, setNombre] = useState('');
-    const [edad, setEdad] = useState('');
-    const [peso, setPeso] = useState('');
-    const [fechaNacimiento, setFechaNacimiento] = useState('');
     const [cargando, setCargando] = useState(false);
+
+    // --- Registro: campos de la tabla `usuario` ---
+    const [nombre, setNombre] = useState('');
+    const [fechaNacimiento, setFechaNacimiento] = useState('');
+    const [peso, setPeso] = useState('');
+    const [altura, setAltura] = useState('');
+    const [genero, setGenero] = useState<'M' | 'F' | 'Otro'>('Otro');   // enum BD: M, F, Otro
+    const [telefono, setTelefono] = useState('');
+    const [nivelActividad, setNivelActividad] = useState<'sedentario' | 'ligero' | 'moderado' | 'activo'>('sedentario');
+    const [condicionesMedicas, setCondicionesMedicas] = useState('');
+    const [restricciones, setRestricciones] = useState('');
+
     const router = useRouter();
 
+    // -----------------------------------------------
+    // LOGIN
+    // -----------------------------------------------
     const handleLogin = async () => {
         console.log('========== INICIO DE LOGIN ==========');
-        console.log('1. Valores ingresados:');
-        console.log('   Email:', email);
-        console.log('   Password:', password ? '******' : 'vacío');
-        
+
         if (!email || !password) {
-            console.log('2. Error: Campos vacíos');
             Alert.alert('Faltan datos', 'Por favor ingresa tu correo y contraseña para continuar.');
             return;
         }
 
-        console.log('2. Campos válidos, iniciando petición...');
         setCargando(true);
-        
+
         try {
             const url = `${API_URL}/login`;
-            console.log('3. URL de petición:', url);
-            
-            const body = JSON.stringify({ email, password });
-            console.log('4. Body enviado:', body);
-            
+            // El campo en la BD y en el backend se llama password_hash
+            const body = JSON.stringify({ email, password_hash: password });
+            console.log('Petición a:', url);
+
             const response = await fetch(url, {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
-                body: body
+                body
             });
-            
-            console.log('5. Respuesta recibida - Status:', response.status);
-            console.log('5. Respuesta - OK?', response.ok);
-            
+
             const data = await response.json();
-            console.log('6. Datos recibidos:', data);
-            
+            console.log('Respuesta:', data);
+
             if (data.success) {
-                console.log('7. ✅ LOGIN EXITOSO - Guardando datos y redirigiendo');
-                // Guardar datos del usuario en AsyncStorage para uso en toda la app
-                await AsyncStorage.setItem('userId', data.user.id.toString());
-                await AsyncStorage.setItem('userName', data.user.nombre || '');
-                await AsyncStorage.setItem('userEmail', data.user.email || '');
-                await AsyncStorage.setItem('userAge', (data.user.edad || '').toString());
-                await AsyncStorage.setItem('userWeight', (data.user.peso || '').toString());
-                await AsyncStorage.setItem('userGender', data.user.genero || '');
-                router.replace('/home');
-                console.log('9. Router.replace ejecutado');
+                const user = data.user;
+                // La PK en la BD es id_usuario, no id
+                await AsyncStorage.setItem('userId',    user.id_usuario.toString());
+                await AsyncStorage.setItem('userName',  user.nombre   || '');
+                await AsyncStorage.setItem('userEmail', user.email    || '');
+                await AsyncStorage.setItem('userAge',   (user.edad    ?? '').toString());
+                await AsyncStorage.setItem('userRol',   user.rol      || 'usuario');
+                // Redirigir según rol: admin → pantalla de administrador
+                router.replace(user.rol === 'admin' ? '/admin' : '/home');
             } else {
-                console.log('7. ❌ LOGIN FALLIDO - Mensaje:', data.message);
                 Alert.alert('Acceso denegado', data.message || 'El correo o la contraseña no son correctos.');
             }
         } catch (error: any) {
-            console.log('7. ❌ ERROR EN LA PETICIÓN:');
-            console.log('   Mensaje:', error.message);
-            console.log('   Error completo:', error);
+            console.error('Error en login:', error.message);
             Alert.alert('Error de conexión', `No pudimos conectarnos. Verifica tu internet e intenta de nuevo.\n${error.message}`);
         } finally {
-            console.log('8. Finalizando, cargando = false');
             setCargando(false);
         }
         console.log('========== FIN DE LOGIN ==========');
     };
 
+    // -----------------------------------------------
+    // REGISTRO
+    // -----------------------------------------------
     const handleRegister = async () => {
         console.log('========== INICIO DE REGISTRO ==========');
-        console.log('1. Datos de registro:', { nombre, email, edad, password: password ? '***' : 'vacío' });
-        
+
+        // Campos obligatorios según la BD (NOT NULL sin DEFAULT)
         if (!nombre || !email || !password || !fechaNacimiento || !peso) {
-            console.log('2. Error: Campos incompletos');
-            Alert.alert('Faltan datos', 'Por favor completa todos los campos (incluyendo peso y fecha de nacimiento) para crear tu cuenta.');
+            Alert.alert('Faltan datos', 'Nombre, correo, contraseña, fecha de nacimiento y peso son obligatorios.');
             return;
         }
 
-        console.log('2. Campos válidos, iniciando registro...');
+        // Validar formato fecha AAAA-MM-DD
+        const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!fechaRegex.test(fechaNacimiento)) {
+            Alert.alert('Fecha inválida', 'Usa el formato AAAA-MM-DD, por ejemplo: 1955-05-20');
+            return;
+        }
+
         setCargando(true);
-        
+
         try {
             const url = `${API_URL}/register`;
-            console.log('3. URL:', url);
-            
-            const body = JSON.stringify({ 
-                nombre, 
-                email, 
-                password, 
-                fecha_nacimiento: fechaNacimiento, 
+            const body = JSON.stringify({
+                nombre,
+                email,
+                password_hash: password,              // campo real en la BD
+                fecha_nacimiento: fechaNacimiento,
                 peso: parseFloat(peso),
-                genero: 'Otro' // Por defecto
+                altura: altura ? parseFloat(altura) : null,
+                genero,                               // enum: 'M' | 'F' | 'Otro'
+                telefono: telefono || null,
+                nivel_actividad: nivelActividad,      // enum: sedentario | ligero | moderado | activo
+                condiciones_medicas: condicionesMedicas || null,
+                restricciones: restricciones || null,
+                // 'edad' NO se envía: columna VIRTUAL generada desde fecha_nacimiento
             });
-            console.log('4. Body:', body);
-            
+            console.log('Petición a:', url);
+
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: body
+                body
             });
-            
-            console.log('5. Status:', response.status);
+
             const data = await response.json();
-            console.log('6. Respuesta:', data);
-            
+            console.log('Respuesta:', data);
+
             if (data.success) {
-                console.log('7. ✅ REGISTRO EXITOSO');
-                Alert.alert('¡Cuenta creada!', 'Bienvenido a VitalApp. Ahora puedes iniciar sesión con tu correo y contraseña.', [{ text: 'Continuar' }]);
+                Alert.alert(
+                    '¡Cuenta creada!',
+                    'Bienvenido a VitalApp. Ahora puedes iniciar sesión con tu correo y contraseña.',
+                    [{ text: 'Continuar' }]
+                );
+                // Limpiar formulario y volver a login
                 setIsRegistering(false);
                 setNombre('');
-                setEdad('');
-                setPeso('');
                 setFechaNacimiento('');
+                setPeso('');
+                setAltura('');
+                setGenero('Otro');
+                setTelefono('');
+                setNivelActividad('sedentario');
+                setCondicionesMedicas('');
+                setRestricciones('');
                 setPassword('');
+                setEmail('');
             } else {
-                console.log('7. ❌ REGISTRO FALLIDO:', data.message);
                 Alert.alert('Error al registrar', data.message || 'No se pudo crear la cuenta.');
             }
         } catch (error: any) {
-            console.log('7. ❌ ERROR:', error.message);
+            console.error('Error en registro:', error.message);
             Alert.alert('Error de conexión', 'No pudimos conectarnos. Verifica tu internet e intenta de nuevo.');
         } finally {
             setCargando(false);
@@ -153,6 +171,9 @@ export default function LoginScreen() {
         console.log('========== FIN DE REGISTRO ==========');
     };
 
+    // -----------------------------------------------
+    // RENDER
+    // -----------------------------------------------
     return (
         <SafeAreaView style={styles.safeArea}>
             <StatusBar barStyle="light-content" backgroundColor="#1E3A8A" />
@@ -161,14 +182,15 @@ export default function LoginScreen() {
                 locations={[0, 0.4, 0.4]}
                 style={styles.gradientBackground}
             >
-                <KeyboardAvoidingView 
+                <KeyboardAvoidingView
                     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                     style={styles.container}
                 >
-                    <ScrollView 
+                    <ScrollView
                         contentContainerStyle={styles.scrollContent}
                         showsVerticalScrollIndicator={false}
                     >
+                        {/* CABECERA */}
                         <View style={styles.header}>
                             <View style={styles.logoCircle}>
                                 <Ionicons name="fitness" size={48} color="#2563EB" />
@@ -177,14 +199,17 @@ export default function LoginScreen() {
                             <Text style={styles.subtitulo}>Tu bienestar, cada día</Text>
                         </View>
 
+                        {/* FORMULARIO */}
                         <View style={styles.formContainer}>
                             <Text style={styles.formTitle}>
                                 {isRegistering ? 'Crear Cuenta Nueva' : 'Inicia Sesión'}
                             </Text>
 
+                            {/* Campos exclusivos del registro */}
                             {isRegistering && (
                                 <>
-                                    <Text style={styles.label}>Nombre completo</Text>
+                                    {/* NOMBRE */}
+                                    <Text style={styles.label}>Nombre completo *</Text>
                                     <View style={styles.inputContainer}>
                                         <Ionicons name="person-outline" size={20} color="#64748B" style={styles.inputIcon} />
                                         <TextInput
@@ -196,21 +221,23 @@ export default function LoginScreen() {
                                         />
                                     </View>
 
-                                    <Text style={styles.label}>Fecha de Nacimiento</Text>
+                                    {/* FECHA DE NACIMIENTO */}
+                                    <Text style={styles.label}>Fecha de nacimiento *</Text>
                                     <View style={styles.inputContainer}>
                                         <Ionicons name="calendar-outline" size={20} color="#64748B" style={styles.inputIcon} />
                                         <TextInput
                                             style={styles.input}
-                                            placeholder="AAAA-MM-DD (Ej: 1955-05-20)"
+                                            placeholder="AAAA-MM-DD  (Ej: 1955-05-20)"
                                             placeholderTextColor="#94A3B8"
                                             value={fechaNacimiento}
                                             onChangeText={setFechaNacimiento}
                                         />
                                     </View>
 
-                                    <Text style={styles.label}>Peso (kg)</Text>
+                                    {/* PESO */}
+                                    <Text style={styles.label}>Peso (kg) *</Text>
                                     <View style={styles.inputContainer}>
-                                        <Ionicons name="fitness-outline" size={20} color="#64748B" style={styles.inputIcon} />
+                                        <Ionicons name="barbell-outline" size={20} color="#64748B" style={styles.inputIcon} />
                                         <TextInput
                                             style={styles.input}
                                             placeholder="Ej: 75.5"
@@ -220,9 +247,98 @@ export default function LoginScreen() {
                                             onChangeText={setPeso}
                                         />
                                     </View>
+
+                                    {/* ALTURA */}
+                                    <Text style={styles.label}>Altura (m)</Text>
+                                    <View style={styles.inputContainer}>
+                                        <Ionicons name="resize-outline" size={20} color="#64748B" style={styles.inputIcon} />
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="Ej: 1.70"
+                                            placeholderTextColor="#94A3B8"
+                                            keyboardType="numeric"
+                                            value={altura}
+                                            onChangeText={setAltura}
+                                        />
+                                    </View>
+
+                                    {/* GÉNERO — enum: M, F, Otro */}
+                                    <Text style={styles.label}>Género</Text>
+                                    <View style={styles.selectorRow}>
+                                        {(['M', 'F', 'Otro'] as const).map(op => (
+                                            <TouchableOpacity
+                                                key={op}
+                                                style={[styles.selectorBtn, genero === op && styles.selectorBtnActive]}
+                                                onPress={() => setGenero(op)}
+                                            >
+                                                <Text style={[styles.selectorTxt, genero === op && styles.selectorTxtActive]}>
+                                                    {op === 'M' ? 'Masculino' : op === 'F' ? 'Femenino' : 'Otro'}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+
+                                    {/* TELÉFONO */}
+                                    <Text style={styles.label}>Teléfono</Text>
+                                    <View style={styles.inputContainer}>
+                                        <Ionicons name="call-outline" size={20} color="#64748B" style={styles.inputIcon} />
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="Ej: 312 123 4567"
+                                            placeholderTextColor="#94A3B8"
+                                            keyboardType="phone-pad"
+                                            value={telefono}
+                                            onChangeText={setTelefono}
+                                        />
+                                    </View>
+
+                                    {/* NIVEL DE ACTIVIDAD — enum: sedentario, ligero, moderado, activo */}
+                                    <Text style={styles.label}>Nivel de actividad</Text>
+                                    <View style={styles.selectorRow}>
+                                        {(['sedentario', 'ligero', 'moderado', 'activo'] as const).map(op => (
+                                            <TouchableOpacity
+                                                key={op}
+                                                style={[styles.selectorBtn, nivelActividad === op && styles.selectorBtnActive]}
+                                                onPress={() => setNivelActividad(op)}
+                                            >
+                                                <Text style={[styles.selectorTxt, nivelActividad === op && styles.selectorTxtActive]}>
+                                                    {op.charAt(0).toUpperCase() + op.slice(1)}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+
+                                    {/* CONDICIONES MÉDICAS */}
+                                    <Text style={styles.label}>Condiciones médicas</Text>
+                                    <View style={[styles.inputContainer, styles.inputMultiline]}>
+                                        <Ionicons name="medkit-outline" size={20} color="#64748B" style={[styles.inputIcon, { alignSelf: 'flex-start', marginTop: 18 }]} />
+                                        <TextInput
+                                            style={[styles.input, { height: 80, textAlignVertical: 'top', paddingTop: 14 }]}
+                                            placeholder="Ej: Diabetes, Hipertensión…"
+                                            placeholderTextColor="#94A3B8"
+                                            multiline
+                                            value={condicionesMedicas}
+                                            onChangeText={setCondicionesMedicas}
+                                        />
+                                    </View>
+
+                                    {/* RESTRICCIONES */}
+                                    <Text style={styles.label}>Restricciones físicas</Text>
+                                    <View style={[styles.inputContainer, styles.inputMultiline]}>
+                                        <Ionicons name="warning-outline" size={20} color="#64748B" style={[styles.inputIcon, { alignSelf: 'flex-start', marginTop: 18 }]} />
+                                        <TextInput
+                                            style={[styles.input, { height: 80, textAlignVertical: 'top', paddingTop: 14 }]}
+                                            placeholder="Ej: No puede levantar peso, rodilla operada…"
+                                            placeholderTextColor="#94A3B8"
+                                            multiline
+                                            value={restricciones}
+                                            onChangeText={setRestricciones}
+                                        />
+                                    </View>
                                 </>
                             )}
 
+                            {/* Campos comunes */}
                             <Text style={styles.label}>Correo electrónico</Text>
                             <View style={styles.inputContainer}>
                                 <Ionicons name="mail-outline" size={20} color="#64748B" style={styles.inputIcon} />
@@ -250,7 +366,8 @@ export default function LoginScreen() {
                                 />
                             </View>
 
-                            <TouchableOpacity 
+                            {/* Botón principal */}
+                            <TouchableOpacity
                                 style={[styles.mainButton, cargando && styles.mainButtonDisabled]}
                                 onPress={isRegistering ? handleRegister : handleLogin}
                                 disabled={cargando}
@@ -265,20 +382,17 @@ export default function LoginScreen() {
                                 )}
                             </TouchableOpacity>
 
-                            <TouchableOpacity 
+                            {/* Cambiar entre login / registro */}
+                            <TouchableOpacity
                                 style={styles.switchContainer}
                                 onPress={() => setIsRegistering(!isRegistering)}
                                 activeOpacity={0.6}
                             >
                                 <Text style={styles.switchText}>
-                                    {isRegistering 
-                                        ? '¿Ya tienes cuenta?' 
-                                        : '¿Eres nuevo aquí?'}
+                                    {isRegistering ? '¿Ya tienes cuenta?' : '¿Eres nuevo aquí?'}
                                 </Text>
                                 <Text style={styles.switchTextBold}>
-                                    {isRegistering 
-                                        ? ' Inicia sesión' 
-                                        : ' Regístrate gratis'}
+                                    {isRegistering ? ' Inicia sesión' : ' Regístrate gratis'}
                                 </Text>
                             </TouchableOpacity>
                         </View>
@@ -290,33 +404,33 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-    safeArea: { 
-        flex: 1, 
-        backgroundColor: '#1E3A8A' 
+    safeArea: {
+        flex: 1,
+        backgroundColor: '#1E3A8A'
     },
     gradientBackground: {
         flex: 1,
     },
-    container: { 
+    container: {
         flex: 1,
     },
-    scrollContent: { 
-        flexGrow: 1, 
-        paddingHorizontal: 24, 
+    scrollContent: {
+        flexGrow: 1,
+        paddingHorizontal: 24,
         paddingTop: 60,
         paddingBottom: 40,
     },
-    header: { 
-        alignItems: 'center', 
+    header: {
+        alignItems: 'center',
         marginBottom: 40,
     },
-    logoCircle: { 
-        width: 100, 
-        height: 100, 
-        borderRadius: 50, 
-        backgroundColor: '#FFFFFF', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
+    logoCircle: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: '#FFFFFF',
+        justifyContent: 'center',
+        alignItems: 'center',
         marginBottom: 20,
         ...Platform.select({
             ios: {
@@ -325,29 +439,25 @@ const styles = StyleSheet.create({
                 shadowOpacity: 0.2,
                 shadowRadius: 16,
             },
-            android: {
-                elevation: 10,
-            },
-            web: {
-                boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
-            }
+            android: { elevation: 10 },
+            web: { boxShadow: '0 8px 16px rgba(0,0,0,0.2)' }
         }),
     },
-    titulo: { 
-        fontSize: 42, 
-        fontWeight: '900', 
-        color: '#FFFFFF', 
+    titulo: {
+        fontSize: 42,
+        fontWeight: '900',
+        color: '#FFFFFF',
         marginBottom: 8,
         letterSpacing: 1,
     },
-    subtitulo: { 
-        fontSize: 18, 
+    subtitulo: {
+        fontSize: 18,
         color: '#DBEAFE',
         fontWeight: '500',
     },
-    formContainer: { 
-        backgroundColor: '#FFFFFF', 
-        borderRadius: 32, 
+    formContainer: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 32,
         padding: 30,
         ...Platform.select({
             ios: {
@@ -356,12 +466,8 @@ const styles = StyleSheet.create({
                 shadowOpacity: 0.1,
                 shadowRadius: 20,
             },
-            android: {
-                elevation: 8,
-            },
-            web: {
-                boxShadow: '0 10px 20px rgba(0, 0, 0, 0.1)',
-            }
+            android: { elevation: 8 },
+            web: { boxShadow: '0 10px 20px rgba(0,0,0,0.1)' }
         }),
     },
     formTitle: {
@@ -371,10 +477,10 @@ const styles = StyleSheet.create({
         marginBottom: 24,
         textAlign: 'center',
     },
-    label: { 
-        fontSize: 16, 
-        fontWeight: '700', 
-        color: '#475569', 
+    label: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#475569',
         marginBottom: 8,
         marginLeft: 4,
     },
@@ -392,19 +498,19 @@ const styles = StyleSheet.create({
     inputIcon: {
         marginRight: 12,
     },
-    input: { 
+    input: {
         flex: 1,
         fontSize: 18,
         color: '#1E293B',
         fontWeight: '500',
         height: '100%',
     },
-    mainButton: { 
-        backgroundColor: '#2563EB', 
-        borderRadius: 16, 
+    mainButton: {
+        backgroundColor: '#2563EB',
+        borderRadius: 16,
         height: 64,
         justifyContent: 'center',
-        alignItems: 'center', 
+        alignItems: 'center',
         marginTop: 12,
         marginBottom: 24,
         ...Platform.select({
@@ -414,22 +520,18 @@ const styles = StyleSheet.create({
                 shadowOpacity: 0.3,
                 shadowRadius: 12,
             },
-            android: {
-                elevation: 6,
-            },
-            web: {
-                boxShadow: '0 8px 12px rgba(37, 99, 235, 0.3)',
-            }
+            android: { elevation: 6 },
+            web: { boxShadow: '0 8px 12px rgba(37,99,235,0.3)' }
         }),
     },
-    mainButtonDisabled: { 
+    mainButtonDisabled: {
         backgroundColor: '#94A3B8',
         shadowOpacity: 0,
         elevation: 0,
     },
-    mainButtonText: { 
-        fontSize: 20, 
-        fontWeight: '800', 
+    mainButtonText: {
+        fontSize: 20,
+        fontWeight: '800',
         color: '#FFFFFF',
     },
     switchContainer: {
@@ -438,14 +540,49 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 12,
     },
-    switchText: { 
-        fontSize: 16, 
-        color: '#64748B', 
+    switchText: {
+        fontSize: 16,
+        color: '#64748B',
         fontWeight: '500',
     },
     switchTextBold: {
         fontSize: 16,
         color: '#2563EB',
         fontWeight: '800',
-    }
+    },
+    selectorRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 20,
+    },
+    selectorBtn: {
+        flex: 1,
+        minWidth: 70,
+        paddingVertical: 12,
+        paddingHorizontal: 8,
+        borderRadius: 12,
+        borderWidth: 1.5,
+        borderColor: '#E2E8F0',
+        backgroundColor: '#F8FAFC',
+        alignItems: 'center',
+    },
+    selectorBtnActive: {
+        borderColor: '#2563EB',
+        backgroundColor: '#EFF6FF',
+    },
+    selectorTxt: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#64748B',
+    },
+    selectorTxtActive: {
+        color: '#2563EB',
+    },
+    inputMultiline: {
+        height: 'auto',
+        minHeight: 60,
+        alignItems: 'flex-start',
+        paddingVertical: 0,
+    },
 });
