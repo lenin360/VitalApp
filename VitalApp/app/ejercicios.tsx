@@ -14,6 +14,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../constants/config';
 import MenuInferior from '../components/MenuInferior';
 import { useTheme } from '../hooks/useTheme';
@@ -25,7 +26,7 @@ interface Ejercicio {
     duracion: number;
     dificultad: string;
     categoria: string;
-    url: string;
+    url?: string;
 }
 
 export default function EjerciciosScreen() {
@@ -33,11 +34,14 @@ export default function EjerciciosScreen() {
     const [filtrados, setFiltrados] = useState<Ejercicio[]>([]);
     const [busqueda, setBusqueda] = useState('');
     const [cargando, setCargando] = useState(true);
+    const [userConditions, setUserConditions] = useState<string[]>([]);
+    const [showOnlyRecommended, setShowOnlyRecommended] = useState(false);
     const router = useRouter();
     const { colors } = useTheme();
 
     useEffect(() => {
         cargarEjercicios();
+        cargarCondiciones();
     }, []);
 
     const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('Todas');
@@ -65,6 +69,18 @@ export default function EjerciciosScreen() {
         setFiltrados(filtradosTemp);
     }, [busqueda, categoriaSeleccionada, ejercicios]);
 
+    const cargarCondiciones = async () => {
+        try {
+            const condicionesGuardadas = await AsyncStorage.getItem('userConditions');
+            if (condicionesGuardadas) {
+                const condiciones = JSON.parse(condicionesGuardadas);
+                setUserConditions(Array.isArray(condiciones) ? condiciones : []);
+            }
+        } catch (error) {
+            console.log('Error cargando condiciones:', error);
+        }
+    };
+
     const cargarEjercicios = async () => {
         try {
             const response = await fetch(`${API_URL}/exercises`);
@@ -75,15 +91,15 @@ export default function EjerciciosScreen() {
             console.error('Error:', error);
             // Datos de prueba premium extendidos
             const datosPrueba = [
-                { id: 1, nombre: 'Zumba Gold: Ritmos Latinos', descripcion: 'Diviértete bailando ritmos suaves diseñados para tu energía', duracion: 1200, dificultad: 'Fácil', categoria: 'Zumba' },
-                { id: 2, nombre: 'Baile en Silla Alegre', descripcion: 'Mueve el cuerpo al compás de la música sin levantarte', duracion: 900, dificultad: 'Fácil', categoria: 'Zumba' },
-                { id: 3, nombre: 'Cardio Dance Pop', descripcion: 'Ejercítate con los mejores éxitos musicales de siempre', duracion: 1500, dificultad: 'Normal', categoria: 'Zumba' },
-                { id: 4, nombre: 'Salto De Tijera', descripcion: 'Excelente ejercicio cardiovascular para despertar el cuerpo', duracion: 1800, dificultad: 'Normal', categoria: 'Cardio' },
-                { id: 5, nombre: 'Toque al Talón', descripcion: 'Fortalece piernas y glúteos suavemente', duracion: 900, dificultad: 'Fácil', categoria: 'Fuerza' },
-                { id: 6, nombre: 'Abdominal Cruzado', descripcion: 'Trabaja el núcleo y mejora la postura', duracion: 1200, dificultad: 'Normal', categoria: 'Fuerza' },
-                { id: 7, nombre: 'Equilibrio en un pie', descripcion: 'Mejora tu estabilidad y evita caídas', duracion: 300, dificultad: 'Fácil', categoria: 'Equilibrio' },
-                { id: 8, nombre: 'Yoga en silla', descripcion: 'Estiramientos suaves sin levantarte', duracion: 600, dificultad: 'Fácil', categoria: 'Silla' },
-                { id: 9, nombre: 'Caminata rítmica', descripcion: 'Marcha al compás de la música', duracion: 1200, dificultad: 'Normal', categoria: 'Cardio' },
+                { id: 1, nombre: 'Zumba Gold: Ritmos Latinos', descripcion: 'Diviértete bailando ritmos suaves diseñados para tu energía', duracion: 1200, dificultad: 'Fácil', categoria: 'Zumba', url: '' },
+                { id: 2, nombre: 'Baile en Silla Alegre', descripcion: 'Mueve el cuerpo al compás de la música sin levantarte', duracion: 900, dificultad: 'Fácil', categoria: 'Zumba', url: '' },
+                { id: 3, nombre: 'Cardio Dance Pop', descripcion: 'Ejercítate con los mejores éxitos musicales de siempre', duracion: 1500, dificultad: 'Normal', categoria: 'Zumba', url: '' },
+                { id: 4, nombre: 'Salto De Tijera', descripcion: 'Excelente ejercicio cardiovascular para despertar el cuerpo', duracion: 1800, dificultad: 'Normal', categoria: 'Cardio', url: '' },
+                { id: 5, nombre: 'Toque al Talón', descripcion: 'Fortalece piernas y glúteos suavemente', duracion: 900, dificultad: 'Fácil', categoria: 'Fuerza', url: '' },
+                { id: 6, nombre: 'Abdominal Cruzado', descripcion: 'Trabaja el núcleo y mejora la postura', duracion: 1200, dificultad: 'Normal', categoria: 'Fuerza', url: '' },
+                { id: 7, nombre: 'Equilibrio en un pie', descripcion: 'Mejora tu estabilidad y evita caídas', duracion: 300, dificultad: 'Fácil', categoria: 'Equilibrio', url: '' },
+                { id: 8, nombre: 'Yoga en silla', descripcion: 'Estiramientos suaves sin levantarte', duracion: 600, dificultad: 'Fácil', categoria: 'Silla', url: '' },
+                { id: 9, nombre: 'Caminata rítmica', descripcion: 'Marcha al compás de la música', duracion: 1200, dificultad: 'Normal', categoria: 'Cardio', url: '' },
             ];
             setEjercicios(datosPrueba);
             setFiltrados(datosPrueba);
@@ -123,6 +139,59 @@ export default function EjerciciosScreen() {
         }
     };
 
+    const hasCondition = (keyword: string) =>
+        userConditions.some((condition) =>
+            condition.toLowerCase().includes(keyword.toLowerCase())
+        );
+
+    const hasHeartCondition = hasCondition('corazón') || hasCondition('corazon') || hasCondition('problemas de corazón') || hasCondition('hipertensión') || hasCondition('hipertension');
+    const hasCancer = hasCondition('cáncer') || hasCondition('cancer');
+    const hasDiabetes = hasCondition('diabetes');
+    const hasHypertension = hasCondition('hipertensión') || hasCondition('hipertension');
+    const hasArthritis = hasCondition('artritis');
+    const hasOsteoporosis = hasCondition('osteoporosis');
+
+    const conditionSummary = userConditions.length > 0
+        ? userConditions.join(', ')
+        : 'Ninguna condición registrada';
+
+    const getExerciseAdvice = (ejercicio: Ejercicio) => {
+        const categoria = (ejercicio.categoria ?? '').toString().toLowerCase();
+        const nombre = (ejercicio.nombre ?? '').toString().toLowerCase();
+
+        if (hasHeartCondition || hasHypertension) {
+            if (['cardio', 'zumba', 'fuerza'].includes(categoria)) {
+                return 'No recomendado para tu condición cardíaca o hipertensión';
+            }
+        }
+
+        if (hasCancer) {
+            if (['cardio', 'fuerza'].includes(categoria)) {
+                return 'No recomendado durante condiciones de cáncer; elige algo más suave';
+            }
+        }
+
+        if (hasArthritis) {
+            if (['fuerza', 'zumba'].includes(categoria)) {
+                return 'Puede ser incómodo si tienes artritis; elige ejercicios suaves';
+            }
+        }
+
+        if (hasOsteoporosis) {
+            if (['fuerza', 'cardio'].includes(categoria)) {
+                return 'Evita ejercicios de impacto elevado si tienes osteoporosis';
+            }
+        }
+
+        if (hasDiabetes) {
+            if (['cardio', 'zumba'].includes(categoria) || nombre.includes('caminata')) {
+                return 'Hazlo con precaución y mantén tu ritmo constante';
+            }
+        }
+
+        return '';
+    };
+
     const getDificultadColor = (dificultad: string) => {
         switch((dificultad || '').toLowerCase()) {
             case 'baja': return { bg: '#F0FDF4', text: '#16A34A' };
@@ -134,6 +203,10 @@ export default function EjerciciosScreen() {
             default: return { bg: '#F1F5F9', text: '#64748B' };
         }
     };
+
+    const visibleEjercicios = showOnlyRecommended
+        ? filtrados.filter((ej) => getExerciseAdvice(ej) === '')
+        : filtrados;
 
     if (cargando) {
         return (
@@ -148,11 +221,16 @@ export default function EjerciciosScreen() {
         <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bg }]}>
             <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.gradientStart} />
             
-            {/* Cabecera Premium */}
-            <LinearGradient
-                colors={[colors.gradientStart, colors.gradientEnd]}
-                style={styles.headerGradient}
+            <ScrollView 
+                style={styles.container}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
             >
+                {/* Cabecera Premium */}
+                <LinearGradient
+                    colors={[colors.gradientStart, colors.gradientEnd]}
+                    style={styles.headerGradient}
+                >
                 <View style={styles.headerTop}>
                     <View style={{flexDirection: 'row', alignItems: 'center'}}>
                         <TouchableOpacity onPress={() => router.push('/home')} style={{marginRight: 16}}>
@@ -161,8 +239,13 @@ export default function EjerciciosScreen() {
                         <Text style={styles.headerTitle}>Explorar</Text>
                     </View>
                     <View style={styles.countBadge}>
-                        <Text style={styles.countText}>{filtrados.length} rutinas</Text>
+                        <Text style={styles.countText}>{visibleEjercicios.length} rutinas</Text>
                     </View>
+                </View>
+                <View style={styles.conditionBanner}>
+                    <Text style={styles.conditionBannerText} numberOfLines={2}>
+                        {userConditions.length > 0 ? `Condiciones registrados: ${conditionSummary}` : 'Marca tus condiciones en Enfermedades para ver recomendaciones y ejercicios no recomendados.'}
+                    </Text>
                 </View>
                 
                 <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
@@ -203,14 +286,30 @@ export default function EjerciciosScreen() {
                         </TouchableOpacity>
                     ))}
                 </ScrollView>
+                <View style={styles.recommendToggleRow}>
+                    <TouchableOpacity
+                        style={[
+                            styles.recommendToggle,
+                            showOnlyRecommended && styles.recommendToggleActive,
+                        ]}
+                        onPress={() => setShowOnlyRecommended((prev) => !prev)}
+                    >
+                        <Ionicons
+                            name={showOnlyRecommended ? 'eye-off' : 'eye'}
+                            size={18}
+                            color={showOnlyRecommended ? '#FFFFFF' : '#2563EB'}
+                        />
+                        <Text style={[
+                            styles.recommendToggleText,
+                            showOnlyRecommended && { color: '#FFFFFF' }
+                        ]}>
+                            {showOnlyRecommended ? 'Solo recomendados' : 'Mostrar no recomendados'}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
             </LinearGradient>
 
-            <ScrollView 
-                style={styles.container}
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-            >
-                {filtrados.length === 0 ? (
+                {visibleEjercicios.length === 0 ? (
                     <View style={styles.emptyContainer}>
                         <View style={styles.emptyIconCircle}>
                             <Ionicons name="search-outline" size={60} color="#94A3B8" />
@@ -219,7 +318,7 @@ export default function EjerciciosScreen() {
                         <Text style={styles.emptySubtext}>Prueba buscando con otras palabras</Text>
                     </View>
                 ) : (
-                    filtrados.map((ejercicio, index) => (
+                    visibleEjercicios.map((ejercicio, index) => (
                         <TouchableOpacity 
                             key={ejercicio.id} 
                             style={[styles.tarjetaEjercicio, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
@@ -241,7 +340,12 @@ export default function EjerciciosScreen() {
                                     </Text>
                                 </View>
                             </View>
-                            
+                            {getExerciseAdvice(ejercicio) ? (
+                                <View style={[styles.warningBanner, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}> 
+                                    <Ionicons name="warning-outline" size={16} color="#B91C1C" />
+                                    <Text style={styles.warningText}>{getExerciseAdvice(ejercicio)}</Text>
+                                </View>
+                            ) : null}
                             <View style={[styles.divider, { backgroundColor: colors.cardBorder }]} />
 
                             <View style={styles.ejercicioFooter}>
@@ -406,6 +510,61 @@ const styles = StyleSheet.create({
     emptySubtext: {
         fontSize: 16,
         color: '#64748B',
+    },
+    conditionBanner: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
+        marginBottom: 16,
+    },
+    conditionBannerText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '600',
+        lineHeight: 20,
+    },
+    warningBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        borderRadius: 16,
+        borderWidth: 1,
+        padding: 12,
+        marginHorizontal: 20,
+        marginBottom: 14,
+    },
+    warningText: {
+        color: '#991B1B',
+        fontSize: 13,
+        fontWeight: '700',
+        flex: 1,
+    },
+    recommendToggleRow: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        marginTop: 12,
+    },
+    recommendToggle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: '#2563EB',
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+    },
+    recommendToggleActive: {
+        backgroundColor: '#2563EB',
+    },
+    recommendToggleText: {
+        color: '#2563EB',
+        fontSize: 13,
+        fontWeight: '700',
     },
     tarjetaEjercicio: { 
         backgroundColor: '#FFFFFF', 

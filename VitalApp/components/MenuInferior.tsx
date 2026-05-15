@@ -34,6 +34,13 @@ export default function MenuInferior() {
       )
     },
     { 
+      name: 'Enfermedades', 
+      path: '/enfermedades', 
+      icon: (color: string, focused: boolean) => (
+        <MaterialCommunityIcons name="shield-check" size={24} color={color} />
+      )
+    },
+    { 
       name: 'Perfil', 
       path: '/perfil', 
       icon: (color: string, focused: boolean) => (
