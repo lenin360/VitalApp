@@ -51,12 +51,12 @@ export default function DetalleEjercicioScreen() {
     const currentIndex = params.index ? parseInt(params.index as string) : 0;
 
     const ejercicio = {
-        id: params.id,
-        nombre: params.nombre || 'Ejercicio',
-        descripcion: params.descripcion,
+        id: params.id as string,
+        nombre: (params.nombre as string) || 'Ejercicio',
+        descripcion: params.descripcion as string,
         duracion: parseInt(params.duracion as string) || 60,
-        dificultad: params.dificultad || 'Normal',
-        url: decodeURIComponent(params.url as string || '')
+        dificultad: (params.dificultad as string) || 'Normal',
+        url: decodeURIComponent((params.url as string) || '')
     };
 
     // Anti-trampa: requiere ver al menos 1/3 de la duración real del video

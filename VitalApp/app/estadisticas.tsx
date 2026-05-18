@@ -34,11 +34,11 @@ export default function EstadisticasScreen() {
         minutos: 0,
         progresoSemanal: [0, 0, 0, 0, 0, 0, 0],
         logros: [
-            { id: 1, nombre: 'Primer paso', icono: '🌟', desbloqueado: false, condicion: 1 },
-            { id: 2, nombre: '5 días seguidos', icono: '🔥', desbloqueado: false, condicion: 5 },
-            { id: 3, nombre: '10 ejercicios', icono: '🎯', desbloqueado: false, condicion: 10 },
-            { id: 4, nombre: '25 ejercicios', icono: '💎', desbloqueado: false, condicion: 25 },
-            { id: 5, nombre: '50 ejercicios', icono: '👑', desbloqueado: false, condicion: 50 },
+            { id: 1, nombre: 'Primer paso', icono: '🌟', desbloqueado: false, condicion: 1, tipo: 'ejercicios' },
+            { id: 2, nombre: '5 días seguidos', icono: '🔥', desbloqueado: false, condicion: 5, tipo: 'racha' },
+            { id: 3, nombre: '10 ejercicios', icono: '🎯', desbloqueado: false, condicion: 10, tipo: 'ejercicios' },
+            { id: 4, nombre: '25 ejercicios', icono: '💎', desbloqueado: false, condicion: 25, tipo: 'ejercicios' },
+            { id: 5, nombre: '50 ejercicios', icono: '👑', desbloqueado: false, condicion: 50, tipo: 'ejercicios' },
         ]
     });
 
