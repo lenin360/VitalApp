@@ -11,7 +11,8 @@ import {
     Modal,
     ActivityIndicator,
     StatusBar,
-    Platform
+    Platform,
+    Linking
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { WebView } from 'react-native-webview';
@@ -199,22 +200,12 @@ export default function DetalleEjercicioScreen() {
                 {/* Reproductor de Video Adaptable */}
                 <View style={styles.videoCard}>
                     <View style={styles.videoContainer}>
-                        {Platform.OS === 'web' ? (
-                            <iframe
-                                src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&enablejsapi=1&origin=${typeof window !== 'undefined' ? window.location.origin : 'https://www.youtube.com'}`}
-                                style={{ width: '100%', height: '100%', border: 'none' }}
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                allowFullScreen
-                                onLoad={() => setCargando(false)}
-                            />
-                        ) : (
-                            <VideoPlayer 
-                                videoId={videoId} 
-                                onEnd={irAlSiguiente} 
-                                onProgress={(segundos) => setSegundosVistos(segundos)}
-                                onReady={() => setCargando(false)}
-                            />
-                        )}
+                        <VideoPlayer 
+                            videoId={videoId || ''} 
+                            onEnd={irAlSiguiente} 
+                            onProgress={(segundos) => setSegundosVistos(segundos)}
+                            onReady={() => setCargando(false)}
+                        />
 
                         {cargando && (
                             <View style={styles.loadingOverlay}>
@@ -224,6 +215,23 @@ export default function DetalleEjercicioScreen() {
                         )}
                     </View>
                 </View>
+
+                {/* Botón de fallback por si el video no carga */}
+                <TouchableOpacity 
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: -10, marginBottom: 20, gap: 8 }}
+                    onPress={() => {
+                        if (typeof window !== 'undefined') {
+                            window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank');
+                        } else {
+                            Linking.openURL(`https://www.youtube.com/watch?v=${videoId}`);
+                        }
+                    }}
+                >
+                    <Ionicons name="open-outline" size={16} color={colors.textSecondary} />
+                    <Text style={{ color: colors.textSecondary, fontSize: 14, textDecorationLine: 'underline' }}>
+                        ¿Problemas con el video? Ábrelo en YouTube
+                    </Text>
+                </TouchableOpacity>
 
                 {/* Info Principal */}
                 <View style={styles.heroSection}>
