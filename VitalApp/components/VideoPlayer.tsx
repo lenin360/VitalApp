@@ -17,23 +17,24 @@ export default function VideoPlayer({ videoId, playing = true, onEnd, onProgress
     // Extraer ID si se pasa una URL completa
     const getCleanId = (id: string) => {
         if (!id) return '';
-        if (id.length === 11) return id;
-        
+        const trimmedId = id.trim();
+        if (trimmedId.length === 11) return trimmedId;
+
         // Manejar varios formatos de URL de YouTube
         const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-        const match = id.match(regExp);
+        const match = trimmedId.match(regExp);
         if (match && match[2].length === 11) {
             return match[2];
         }
-        
+
         // Fallback para IDs que podrían tener parámetros pegados
-        if (id.includes('v=')) return id.split('v=')[1].split('&')[0].substring(0, 11);
-        if (id.includes('youtu.be/')) return id.split('youtu.be/')[1].split('?')[0].substring(0, 11);
-        if (id.includes('embed/')) return id.split('embed/')[1].split('?')[0].substring(0, 11);
-        
-        return id;
+        if (trimmedId.includes('v=')) return trimmedId.split('v=')[1].split('&')[0].substring(0, 11);
+        if (trimmedId.includes('youtu.be/')) return trimmedId.split('youtu.be/')[1].split('?')[0].substring(0, 11);
+        if (trimmedId.includes('embed/')) return trimmedId.split('embed/')[1].split('?')[0].substring(0, 11);
+
+        return trimmedId;
     };
-    
+
     const cleanId = getCleanId(videoId);
     const playerRef = useRef<any>(null);
     const [cargando, setCargando] = useState(true);
@@ -46,9 +47,13 @@ export default function VideoPlayer({ videoId, playing = true, onEnd, onProgress
     }, [onReady, cleanId]);
 
     const onError = useCallback((e: any) => {
-        console.error('Error en video (' + cleanId + '):', e);
-        // Si el ID parece sospechoso (longitud != 11), marcar error
-        setError(true);
+        console.error('Error en video (' + cleanId + ') code:', e);
+        // YouTube API error codes: 2, 5, 100, 101, 150
+        // Ignoramos errores menores para no romper la UI si el video puede reproducirse
+        const errCode = String(e);
+        if (cleanId.length !== 11 || errCode === '150' || errCode === '101' || errCode === '100') {
+            setError(true);
+        }
         setCargando(false);
     }, [cleanId]);
 
@@ -84,8 +89,8 @@ export default function VideoPlayer({ videoId, playing = true, onEnd, onProgress
                 <Ionicons name="alert-circle" size={48} color="#FF3B30" />
                 <Text style={styles.errorText}>Video no disponible</Text>
                 <Text style={styles.errorSubtext}>ID: {cleanId || videoId}</Text>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                     style={styles.openYoutubeBtn}
                     onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${cleanId || videoId}`)}
                 >
@@ -110,6 +115,8 @@ export default function VideoPlayer({ videoId, playing = true, onEnd, onProgress
                 width={width}
                 videoId={cleanId}
                 play={playing}
+                forceAndroidAutoplay={true}
+                baseUrl="https://www.youtube.com"
                 onReady={onReadyInternal}
                 onError={onError}
                 onChangeState={onStateChange}
@@ -118,8 +125,6 @@ export default function VideoPlayer({ videoId, playing = true, onEnd, onProgress
                 webViewProps={{
                     allowsFullscreenVideo: true,
                     androidLayerType: 'hardware',
-                    // Configurar origin para evitar bloqueos de embedding
-                    origin: 'https://www.youtube.com',
                 }}
             />
         </View>

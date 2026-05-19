@@ -11,7 +11,8 @@ import {
     Alert,
     ActivityIndicator,
     ScrollView,
-    StatusBar
+    StatusBar,
+    Dimensions
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,12 +20,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../constants/config';
 
+const isWeb = Platform.OS === 'web';
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 export default function LoginScreen() {
     // --- Login ---
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isRegistering, setIsRegistering] = useState(false);
     const [cargando, setCargando] = useState(false);
+    const [errorLogin, setErrorLogin] = useState(false);
 
     // --- Registro: campos de la tabla `usuario` ---
     const [nombre, setNombre] = useState('');
@@ -81,7 +86,7 @@ export default function LoginScreen() {
                 // Redirigir según rol: admin → pantalla de administrador
                 router.replace(user.rol === 'admin' ? '/admin' : '/home');
             } else {
-                Alert.alert('Acceso denegado', data.message || 'El correo o la contraseña no son correctos.');
+                setErrorLogin(true);
             }
         } catch (error: any) {
             console.error('Error en login:', error.message);
@@ -172,6 +177,45 @@ export default function LoginScreen() {
     };
 
     // -----------------------------------------------
+    // PANTALLA DE ERROR DE CREDENCIALES
+    // -----------------------------------------------
+    if (errorLogin) {
+        return (
+            <SafeAreaView style={styles.safeArea}>
+                <StatusBar barStyle="light-content" backgroundColor="#1E3A8A" />
+                <LinearGradient
+                    colors={['#1E3A8A', '#2563EB', '#F8FAFC']}
+                    locations={[0, 0.4, 0.4]}
+                    style={styles.gradientBackground}
+                >
+                    <View style={styles.errorContainer}>
+                        <View style={styles.errorCard}>
+                            <View style={styles.errorIconCircle}>
+                                <Ionicons name="close-circle" size={isWeb ? 56 : 72} color="#EF4444" />
+                            </View>
+                            <Text style={styles.errorTitle}>Acceso denegado</Text>
+                            <Text style={styles.errorMessage}>
+                                Usuario o contraseña incorrecta
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.errorButton}
+                                onPress={() => {
+                                    setErrorLogin(false);
+                                    setPassword('');
+                                }}
+                                activeOpacity={0.8}
+                            >
+                                <Ionicons name="arrow-back" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                                <Text style={styles.errorButtonText}>Volver al login</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </LinearGradient>
+            </SafeAreaView>
+        );
+    }
+
+    // -----------------------------------------------
     // RENDER
     // -----------------------------------------------
     return (
@@ -193,7 +237,7 @@ export default function LoginScreen() {
                         {/* CABECERA */}
                         <View style={styles.header}>
                             <View style={styles.logoCircle}>
-                                <Ionicons name="fitness" size={48} color="#2563EB" />
+                                <Ionicons name="fitness" size={isWeb ? 30 : 48} color="#2563EB" />
                             </View>
                             <Text style={styles.titulo}>VitalApp</Text>
                             <Text style={styles.subtitulo}>Tu bienestar, cada día</Text>
@@ -406,7 +450,8 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: '#1E3A8A'
+        backgroundColor: '#1E3A8A',
+        ...(isWeb ? { height: '100vh' as any, overflow: 'hidden' as any } : {}),
     },
     gradientBackground: {
         flex: 1,
@@ -416,22 +461,24 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         flexGrow: 1,
-        paddingHorizontal: 24,
-        paddingTop: 60,
-        paddingBottom: 40,
+        justifyContent: isWeb ? 'center' : ('flex-start' as any),
+        alignItems: isWeb ? 'center' : ('stretch' as any),
+        paddingHorizontal: isWeb ? 24 : 24,
+        paddingTop: isWeb ? 16 : 60,
+        paddingBottom: isWeb ? 16 : 40,
     },
     header: {
         alignItems: 'center',
-        marginBottom: 40,
+        marginBottom: isWeb ? 16 : 40,
     },
     logoCircle: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
+        width: isWeb ? 64 : 100,
+        height: isWeb ? 64 : 100,
+        borderRadius: isWeb ? 32 : 50,
         backgroundColor: '#FFFFFF',
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: isWeb ? 8 : 20,
         ...Platform.select({
             ios: {
                 shadowColor: '#000',
@@ -444,21 +491,23 @@ const styles = StyleSheet.create({
         }),
     },
     titulo: {
-        fontSize: 42,
+        fontSize: isWeb ? 30 : 42,
         fontWeight: '900',
         color: '#FFFFFF',
-        marginBottom: 8,
+        marginBottom: isWeb ? 2 : 8,
         letterSpacing: 1,
     },
     subtitulo: {
-        fontSize: 18,
+        fontSize: isWeb ? 14 : 18,
         color: '#DBEAFE',
         fontWeight: '500',
     },
     formContainer: {
         backgroundColor: '#FFFFFF',
-        borderRadius: 32,
-        padding: 30,
+        borderRadius: isWeb ? 20 : 32,
+        padding: isWeb ? 20 : 30,
+        width: '100%',
+        ...(isWeb ? { maxWidth: 420 } : {}),
         ...Platform.select({
             ios: {
                 shadowColor: '#000',
@@ -471,17 +520,17 @@ const styles = StyleSheet.create({
         }),
     },
     formTitle: {
-        fontSize: 24,
+        fontSize: isWeb ? 18 : 24,
         fontWeight: '900',
         color: '#1E293B',
-        marginBottom: 24,
+        marginBottom: isWeb ? 14 : 24,
         textAlign: 'center',
     },
     label: {
-        fontSize: 16,
+        fontSize: isWeb ? 13 : 16,
         fontWeight: '700',
         color: '#475569',
-        marginBottom: 8,
+        marginBottom: isWeb ? 4 : 8,
         marginLeft: 4,
     },
     inputContainer: {
@@ -489,30 +538,31 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 1.5,
         borderColor: '#E2E8F0',
-        borderRadius: 16,
+        borderRadius: isWeb ? 10 : 16,
         backgroundColor: '#F8FAFC',
-        marginBottom: 20,
-        paddingHorizontal: 16,
-        height: 60,
+        marginBottom: isWeb ? 10 : 20,
+        paddingHorizontal: isWeb ? 10 : 16,
+        height: isWeb ? 40 : 60,
     },
     inputIcon: {
-        marginRight: 12,
+        marginRight: isWeb ? 8 : 12,
     },
     input: {
         flex: 1,
-        fontSize: 18,
+        fontSize: isWeb ? 14 : 18,
         color: '#1E293B',
         fontWeight: '500',
         height: '100%',
+        ...(isWeb ? { outlineStyle: 'none' as any } : {}),
     },
     mainButton: {
         backgroundColor: '#2563EB',
-        borderRadius: 16,
-        height: 64,
+        borderRadius: isWeb ? 10 : 16,
+        height: isWeb ? 42 : 64,
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: 12,
-        marginBottom: 24,
+        marginTop: isWeb ? 6 : 12,
+        marginBottom: isWeb ? 12 : 24,
         ...Platform.select({
             ios: {
                 shadowColor: '#2563EB',
@@ -521,7 +571,7 @@ const styles = StyleSheet.create({
                 shadowRadius: 12,
             },
             android: { elevation: 6 },
-            web: { boxShadow: '0 8px 12px rgba(37,99,235,0.3)' }
+            web: { boxShadow: '0 8px 12px rgba(37,99,235,0.3)', cursor: 'pointer' }
         }),
     },
     mainButtonDisabled: {
@@ -530,7 +580,7 @@ const styles = StyleSheet.create({
         elevation: 0,
     },
     mainButtonText: {
-        fontSize: 20,
+        fontSize: isWeb ? 16 : 20,
         fontWeight: '800',
         color: '#FFFFFF',
     },
@@ -538,41 +588,43 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
-        paddingVertical: 12,
+        paddingVertical: isWeb ? 4 : 12,
     },
     switchText: {
-        fontSize: 16,
+        fontSize: isWeb ? 13 : 16,
         color: '#64748B',
         fontWeight: '500',
     },
     switchTextBold: {
-        fontSize: 16,
+        fontSize: isWeb ? 13 : 16,
         color: '#2563EB',
         fontWeight: '800',
+        ...(isWeb ? { cursor: 'pointer' as any } : {}),
     },
     selectorRow: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 8,
-        marginBottom: 20,
+        gap: isWeb ? 6 : 8,
+        marginBottom: isWeb ? 10 : 20,
     },
     selectorBtn: {
         flex: 1,
-        minWidth: 70,
-        paddingVertical: 12,
-        paddingHorizontal: 8,
-        borderRadius: 12,
+        minWidth: isWeb ? 60 : 70,
+        paddingVertical: isWeb ? 8 : 12,
+        paddingHorizontal: isWeb ? 6 : 8,
+        borderRadius: isWeb ? 8 : 12,
         borderWidth: 1.5,
         borderColor: '#E2E8F0',
         backgroundColor: '#F8FAFC',
         alignItems: 'center',
+        ...(isWeb ? { cursor: 'pointer' as any } : {}),
     },
     selectorBtnActive: {
         borderColor: '#2563EB',
         backgroundColor: '#EFF6FF',
     },
     selectorTxt: {
-        fontSize: 14,
+        fontSize: isWeb ? 12 : 14,
         fontWeight: '600',
         color: '#64748B',
     },
@@ -581,8 +633,81 @@ const styles = StyleSheet.create({
     },
     inputMultiline: {
         height: 'auto',
-        minHeight: 60,
+        minHeight: isWeb ? 40 : 60,
         alignItems: 'flex-start',
         paddingVertical: 0,
     },
+    errorContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+    },
+    errorCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: isWeb ? 20 : 32,
+        padding: isWeb ? 36 : 44,
+        width: '100%',
+        ...(isWeb ? { maxWidth: 420 } : {}),
+        alignItems: 'center',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.1,
+                shadowRadius: 20,
+            },
+            android: { elevation: 8 },
+            web: { boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }
+        }),
+    },
+    errorIconCircle: {
+        width: isWeb ? 88 : 110,
+        height: isWeb ? 88 : 110,
+        borderRadius: isWeb ? 44 : 55,
+        backgroundColor: '#FEF2F2',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: isWeb ? 18 : 24,
+    },
+    errorTitle: {
+        fontSize: isWeb ? 22 : 28,
+        fontWeight: '900',
+        color: '#1E293B',
+        marginBottom: isWeb ? 8 : 12,
+        textAlign: 'center',
+    },
+    errorMessage: {
+        fontSize: isWeb ? 15 : 18,
+        fontWeight: '500',
+        color: '#64748B',
+        textAlign: 'center',
+        marginBottom: isWeb ? 24 : 32,
+        lineHeight: isWeb ? 22 : 26,
+    },
+    errorButton: {
+        flexDirection: 'row',
+        backgroundColor: '#2563EB',
+        borderRadius: isWeb ? 10 : 16,
+        height: isWeb ? 44 : 56,
+        paddingHorizontal: isWeb ? 28 : 36,
+        justifyContent: 'center',
+        alignItems: 'center',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#2563EB',
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: 0.3,
+                shadowRadius: 10,
+            },
+            android: { elevation: 6 },
+            web: { boxShadow: '0 6px 12px rgba(37,99,235,0.3)', cursor: 'pointer' }
+        }),
+    },
+    errorButtonText: {
+        fontSize: isWeb ? 15 : 18,
+        fontWeight: '800',
+        color: '#FFFFFF',
+    },
 });
+

@@ -66,12 +66,37 @@ export default function PerfilScreen() {
             const temaGuardado = await AsyncStorage.getItem('darkMode');
             const notifGuardadas = await AsyncStorage.getItem('notifications');
 
+            // Intentar obtener datos actualizados desde el backend (edad calculada en BD)
+            let edadBackend = edad || '';
+            let pesoBackend = await AsyncStorage.getItem('userWeight') || '';
+            let nombreBackend = nombre || 'Usuario';
+            let emailBackend = email || '';
+
+            if (id) {
+                try {
+                    const response = await fetch(`${API_URL}/user/${id}`);
+                    const data = await response.json();
+                    if (data.success && data.user) {
+                        edadBackend = data.user.edad?.toString() || edadBackend;
+                        pesoBackend = data.user.peso?.toString() || pesoBackend;
+                        nombreBackend = data.user.nombre || nombreBackend;
+                        emailBackend = data.user.email || emailBackend;
+
+                        // Actualizar AsyncStorage con los datos frescos del backend
+                        await AsyncStorage.setItem('userAge', edadBackend);
+                        if (pesoBackend) await AsyncStorage.setItem('userWeight', pesoBackend);
+                    }
+                } catch (backendError) {
+                    console.log('Backend no disponible, usando datos locales');
+                }
+            }
+
             setUsuario({
                 id: id || '',
-                nombre: nombre || 'Usuario',
-                email: email || '',
-                edad: edad || '',
-                peso: await AsyncStorage.getItem('userWeight') || '',
+                nombre: nombreBackend,
+                email: emailBackend,
+                edad: edadBackend,
+                peso: pesoBackend,
                 ejerciciosCompletados: stats ? stats.exercises : 0,
                 rachaDias: parseInt(rachaStr || '0')
             });
@@ -146,8 +171,8 @@ export default function PerfilScreen() {
             '¿Desea finalizar la sesión actual?',
             [
                 { text: 'Cancelar', style: 'cancel' },
-                { 
-                    text: 'Confirmar', 
+                {
+                    text: 'Confirmar',
                     style: 'destructive',
                     onPress: async () => {
                         await AsyncStorage.removeItem('userId');
@@ -173,8 +198,8 @@ export default function PerfilScreen() {
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bg }]}>
             <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.gradientStart} />
-            
-            <ScrollView 
+
+            <ScrollView
                 style={[styles.container, { backgroundColor: colors.bg }]}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
@@ -185,13 +210,13 @@ export default function PerfilScreen() {
                     style={styles.headerGradient}
                 >
                     <View style={styles.headerTop}>
-                        <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                            <TouchableOpacity onPress={() => router.push('/home')} style={{marginRight: 16}}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <TouchableOpacity onPress={() => router.push('/home')} style={{ marginRight: 16 }}>
                                 <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
                             </TouchableOpacity>
                             <Text style={styles.headerTitle}>Mi Perfil</Text>
                         </View>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             onPress={() => editando ? guardarCambios() : setEditando(true)}
                             style={styles.editButton}
                             activeOpacity={0.8}
@@ -201,10 +226,10 @@ export default function PerfilScreen() {
                                 <ActivityIndicator size="small" color="#2563EB" />
                             ) : (
                                 <>
-                                    <Ionicons 
-                                        name={editando ? 'checkmark-circle' : 'create'} 
-                                        size={20} 
-                                        color={editando ? "#10B981" : "#1E3A8A"} 
+                                    <Ionicons
+                                        name={editando ? 'checkmark-circle' : 'create'}
+                                        size={20}
+                                        color={editando ? "#10B981" : "#1E3A8A"}
                                     />
                                     <Text style={[styles.editButtonText, editando && { color: '#10B981' }]}>
                                         {editando ? 'Guardar' : 'Editar'}
@@ -231,7 +256,7 @@ export default function PerfilScreen() {
                         <Text style={styles.avatarEmail}>{usuario.email || 'Sin correo'}</Text>
                     </View>
                 </LinearGradient>
-                
+
                 {/* Mensajes de feedback */}
                 {mostrarMensaje !== '' && (
                     <View style={{ backgroundColor: '#D1FAE5', padding: 12, marginHorizontal: 20, marginTop: 16, borderRadius: 12, borderWidth: 1, borderColor: '#10B981', alignItems: 'center' }}>
@@ -263,7 +288,7 @@ export default function PerfilScreen() {
                         </View>
                     </View>
                 </View>
-                
+
                 {/* Insignias Recientes - NUEVO */}
                 <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.cardBorder, paddingVertical: 20 }]}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -303,12 +328,12 @@ export default function PerfilScreen() {
                 {/* Información Personal */}
                 <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
                     <Text style={[styles.sectionTitle, { color: colors.text }]}>Información Personal</Text>
-                    
+
                     <View style={styles.inputGroup}>
                         <Text style={[styles.label, { color: colors.textSecondary }]}>Nombre completo</Text>
                         <TextInput
                             style={[
-                                styles.input, 
+                                styles.input,
                                 { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.inputText },
                                 !editando && { backgroundColor: colors.inputDisabledBg, color: colors.textSecondary }
                             ]}
@@ -338,6 +363,19 @@ export default function PerfilScreen() {
                     </View>
 
                     <View style={styles.inputGroup}>
+                        <Text style={[styles.label, { color: colors.textSecondary }]}>Edad</Text>
+                        <View style={[
+                            styles.input,
+                            { backgroundColor: colors.inputDisabledBg, borderColor: colors.inputBorder, flexDirection: 'row', alignItems: 'center' }
+                        ]}>
+                            <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                            <Text style={{ color: colors.textSecondary, fontSize: 16, fontWeight: '600' }}>
+                                {usuario.edad ? `${usuario.edad} años` : 'No disponible'}
+                            </Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.inputGroup}>
                         <Text style={[styles.label, { color: colors.textSecondary }]}>Peso Actual (kg)</Text>
                         <TextInput
                             style={[
@@ -358,34 +396,34 @@ export default function PerfilScreen() {
                 {/* Ajustes */}
                 <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
                     <Text style={[styles.sectionTitle, { color: colors.text }]}>Ajustes de la App</Text>
-                    
+
                     <View style={styles.settingItem}>
                         <View style={[styles.settingIcon, { backgroundColor: temaOscuro ? '#1E3A8A' : '#EFF6FF' }]}>
                             <Ionicons name="notifications" size={24} color="#2563EB" />
                         </View>
                         <Text style={[styles.settingText, { color: colors.text }]}>Notificaciones</Text>
-                        <Switch 
+                        <Switch
                             value={notificaciones}
                             onValueChange={toggleNotificaciones}
                             trackColor={{ false: '#CBD5E1', true: '#93C5FD' }}
                             thumbColor={notificaciones ? '#2563EB' : '#F8FAFC'}
                         />
                     </View>
-                    
+
                     <View style={styles.settingItem}>
                         <View style={[styles.settingIcon, { backgroundColor: temaOscuro ? '#581C87' : '#F3E8FF' }]}>
                             <Ionicons name="moon" size={24} color="#9333EA" />
                         </View>
                         <Text style={[styles.settingText, { color: colors.text }]}>Tema Oscuro</Text>
-                        <Switch 
+                        <Switch
                             value={temaOscuro}
                             onValueChange={toggleTemaOscuro}
                             trackColor={{ false: '#CBD5E1', true: '#D8B4FE' }}
                             thumbColor={temaOscuro ? '#9333EA' : '#F8FAFC'}
                         />
                     </View>
-                    
-                    <TouchableOpacity 
+
+                    <TouchableOpacity
                         style={[styles.settingItem, { borderBottomWidth: 0 }]}
                         onPress={() => router.push('/recordatorios')}
                         activeOpacity={0.7}
@@ -399,8 +437,8 @@ export default function PerfilScreen() {
                 </View>
 
                 {/* Cerrar Sesión */}
-                <TouchableOpacity 
-                    style={[styles.logoutButton, temaOscuro && { backgroundColor: '#371717', borderColor: '#7F1D1D' }]} 
+                <TouchableOpacity
+                    style={[styles.logoutButton, temaOscuro && { backgroundColor: '#371717', borderColor: '#7F1D1D' }]}
                     onPress={handleLogout}
                     activeOpacity={0.8}
                 >
@@ -416,27 +454,27 @@ export default function PerfilScreen() {
 }
 
 const styles = StyleSheet.create({
-    safeArea: { 
-        flex: 1, 
-        backgroundColor: '#F8FAFC' 
+    safeArea: {
+        flex: 1,
+        backgroundColor: '#F8FAFC'
     },
-    container: { 
+    container: {
         flex: 1,
     },
     scrollContent: {
         paddingBottom: 100,
     },
-    centeredContainer: { 
-        flex: 1, 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        backgroundColor: '#F8FAFC' 
+    centeredContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#F8FAFC'
     },
-    loadingText: { 
-        marginTop: 16, 
-        fontSize: 18, 
+    loadingText: {
+        marginTop: 16,
+        fontSize: 18,
         fontWeight: '600',
-        color: '#1E293B' 
+        color: '#1E293B'
     },
     headerGradient: {
         paddingHorizontal: 24,
@@ -446,16 +484,16 @@ const styles = StyleSheet.create({
         borderBottomRightRadius: 32,
         marginBottom: 24,
     },
-    headerTop: { 
-        flexDirection: 'row', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
+    headerTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         marginBottom: 24,
     },
-    headerTitle: { 
-        fontSize: 32, 
-        fontWeight: '900', 
-        color: '#FFFFFF' 
+    headerTitle: {
+        fontSize: 32,
+        fontWeight: '900',
+        color: '#FFFFFF'
     },
     editButton: {
         flexDirection: 'row',
@@ -481,25 +519,25 @@ const styles = StyleSheet.create({
         minWidth: 100,
         justifyContent: 'center',
     },
-    editButtonText: { 
-        fontSize: 16, 
-        color: '#1E3A8A', 
+    editButtonText: {
+        fontSize: 16,
+        color: '#1E3A8A',
         fontWeight: '800',
         marginLeft: 8,
     },
-    avatarSection: { 
-        alignItems: 'center', 
+    avatarSection: {
+        alignItems: 'center',
     },
     avatarContainer: {
         position: 'relative',
         marginBottom: 16,
     },
-    avatar: { 
-        width: 120, 
-        height: 120, 
-        borderRadius: 60, 
-        backgroundColor: '#FFFFFF', 
-        justifyContent: 'center', 
+    avatar: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: '#FFFFFF',
+        justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 4,
         borderColor: '#93C5FD',
@@ -518,10 +556,10 @@ const styles = StyleSheet.create({
             }
         }),
     },
-    avatarText: { 
-        fontSize: 48, 
-        fontWeight: '900', 
-        color: '#1E3A8A' 
+    avatarText: {
+        fontSize: 48,
+        fontWeight: '900',
+        color: '#1E3A8A'
     },
     avatarEditBadge: {
         position: 'absolute',
@@ -547,11 +585,11 @@ const styles = StyleSheet.create({
         color: '#DBEAFE',
         fontWeight: '500',
     },
-    statsCard: { 
-        backgroundColor: '#FFFFFF', 
-        marginHorizontal: 20, 
-        padding: 24, 
-        borderRadius: 24, 
+    statsCard: {
+        backgroundColor: '#FFFFFF',
+        marginHorizontal: 20,
+        padding: 24,
+        borderRadius: 24,
         marginTop: -30,
         marginBottom: 20,
         ...Platform.select({
@@ -571,24 +609,24 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#E2E8F0',
     },
-    statsRow: { 
-        flexDirection: 'row', 
+    statsRow: {
+        flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
     },
-    statItem: { 
+    statItem: {
         alignItems: 'center',
         flex: 1,
     },
-    statNumber: { 
-        fontSize: 28, 
-        fontWeight: '900', 
+    statNumber: {
+        fontSize: 28,
+        fontWeight: '900',
         color: '#1E293B',
         marginBottom: 4,
     },
-    statLabel: { 
-        fontSize: 14, 
-        color: '#64748B', 
+    statLabel: {
+        fontSize: 14,
+        color: '#64748B',
         fontWeight: '600',
     },
     statDivider: {
@@ -596,11 +634,11 @@ const styles = StyleSheet.create({
         height: 40,
         backgroundColor: '#E2E8F0',
     },
-    sectionCard: { 
-        backgroundColor: '#FFFFFF', 
-        marginHorizontal: 20, 
-        padding: 24, 
-        borderRadius: 24, 
+    sectionCard: {
+        backgroundColor: '#FFFFFF',
+        marginHorizontal: 20,
+        padding: 24,
+        borderRadius: 24,
         marginBottom: 20,
         ...Platform.select({
             ios: {
@@ -628,19 +666,19 @@ const styles = StyleSheet.create({
     inputGroup: {
         marginBottom: 20,
     },
-    label: { 
-        fontSize: 15, 
-        fontWeight: '700', 
-        color: '#475569', 
+    label: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#475569',
         marginBottom: 8,
     },
-    input: { 
-        borderWidth: 1, 
-        borderColor: '#CBD5E1', 
-        borderRadius: 16, 
-        paddingHorizontal: 20, 
-        paddingVertical: 16, 
-        fontSize: 18, 
+    input: {
+        borderWidth: 1,
+        borderColor: '#CBD5E1',
+        borderRadius: 16,
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        fontSize: 18,
         backgroundColor: '#FFFFFF',
         color: '#1E293B',
         fontWeight: '500',
@@ -666,21 +704,21 @@ const styles = StyleSheet.create({
         color: '#1E293B',
         fontWeight: '600',
     },
-    logoutButton: { 
-        backgroundColor: '#FEF2F2', 
-        marginHorizontal: 20, 
-        padding: 20, 
-        borderRadius: 20, 
-        alignItems: 'center', 
+    logoutButton: {
+        backgroundColor: '#FEF2F2',
+        marginHorizontal: 20,
+        padding: 20,
+        borderRadius: 20,
+        alignItems: 'center',
         marginBottom: 30,
         flexDirection: 'row',
         justifyContent: 'center',
         borderWidth: 2,
         borderColor: '#FECACA',
     },
-    logoutButtonText: { 
-        color: '#DC2626', 
-        fontSize: 18, 
+    logoutButtonText: {
+        color: '#DC2626',
+        fontSize: 18,
         fontWeight: '800',
         marginLeft: 12,
     },

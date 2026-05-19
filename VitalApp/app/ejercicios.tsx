@@ -9,7 +9,8 @@ import {
     SafeAreaView,
     TextInput,
     StatusBar,
-    Platform
+    Platform,
+    Image
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../constants/config';
 import MenuInferior from '../components/MenuInferior';
 import { useTheme } from '../hooks/useTheme';
+import { getVideoIdForExercise } from '../constants/exercises';
 
 interface Ejercicio {
     id: number;
@@ -50,10 +52,10 @@ export default function EjerciciosScreen() {
 
     useEffect(() => {
         let filtradosTemp = ejercicios;
-        
+
         // Filtrar por búsqueda
         if (busqueda.trim() !== '') {
-            filtradosTemp = filtradosTemp.filter(e => 
+            filtradosTemp = filtradosTemp.filter(e =>
                 e.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
                 e.categoria.toLowerCase().includes(busqueda.toLowerCase())
             );
@@ -61,7 +63,7 @@ export default function EjerciciosScreen() {
 
         // Filtrar por categoría
         if (categoriaSeleccionada !== 'Todas') {
-            filtradosTemp = filtradosTemp.filter(e => 
+            filtradosTemp = filtradosTemp.filter(e =>
                 e.categoria.toLowerCase() === categoriaSeleccionada.toLowerCase()
             );
         }
@@ -85,8 +87,20 @@ export default function EjerciciosScreen() {
         try {
             const response = await fetch(`${API_URL}/exercises`);
             const data = await response.json();
-            setEjercicios(data.exercises || []);
-            setFiltrados(data.exercises || []);
+
+            // Map the backend data structure to match the frontend Ejercicio interface
+            const ejerciciosMapeados = (data.exercises || []).map((e: any) => ({
+                id: e.id_video || e.id,
+                nombre: e.nombre_video || e.nombre,
+                descripcion: e.descripcion,
+                duracion: e.duracion_min ? e.duracion_min * 60 : (e.duracion || 0),
+                dificultad: e.dificultad,
+                categoria: e.categoria || 'Variado',
+                url: e.link_video || e.url || ''
+            }));
+
+            setEjercicios(ejerciciosMapeados);
+            setFiltrados(ejerciciosMapeados);
         } catch (error) {
             console.error('Error:', error);
             // Datos de prueba premium extendidos
@@ -122,8 +136,19 @@ export default function EjerciciosScreen() {
         });
     };
 
+    // Extract YouTube video ID from a URL or exercise name
+    const getVideoId = (ejercicio: Ejercicio): string => {
+        const url = ejercicio.url || '';
+        if (url) {
+            if (url.includes('v=')) return url.split('v=')[1].split('&')[0].substring(0, 11);
+            if (url.includes('youtu.be/')) return url.split('youtu.be/')[1].split('?')[0].substring(0, 11);
+            if (url.includes('embed/')) return url.split('embed/')[1].split('?')[0].substring(0, 11);
+        }
+        return getVideoIdForExercise(ejercicio.nombre);
+    };
+
     const getCategoryIcon = (categoria: string) => {
-        switch((categoria || '').toLowerCase()) {
+        switch ((categoria || '').toLowerCase()) {
             case 'cardio': return 'heart-outline';
             case 'zumba': return 'musical-notes-outline';
             case 'fuerza': return 'barbell-outline';
@@ -193,7 +218,7 @@ export default function EjerciciosScreen() {
     };
 
     const getDificultadColor = (dificultad: string) => {
-        switch((dificultad || '').toLowerCase()) {
+        switch ((dificultad || '').toLowerCase()) {
             case 'baja': return { bg: '#F0FDF4', text: '#16A34A' };
             case 'media': return { bg: '#FEF9C3', text: '#CA8A04' };
             case 'alta': return { bg: '#FEF2F2', text: '#DC2626' };
@@ -232,8 +257,8 @@ export default function EjerciciosScreen() {
                     style={styles.headerGradient}
                 >
                 <View style={styles.headerTop}>
-                    <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                        <TouchableOpacity onPress={() => router.push('/home')} style={{marginRight: 16}}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <TouchableOpacity onPress={() => router.push('/home')} style={{ marginRight: 16 }}>
                             <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
                         </TouchableOpacity>
                         <Text style={styles.headerTitle}>Explorar</Text>
@@ -261,9 +286,9 @@ export default function EjerciciosScreen() {
                 </View>
 
                 {/* Filtro de Categorías */}
-                <ScrollView 
-                    horizontal 
-                    showsHorizontalScrollIndicator={false} 
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
                     style={styles.categoryScroll}
                     contentContainerStyle={styles.categoryContent}
                 >
@@ -348,31 +373,87 @@ export default function EjerciciosScreen() {
                             ) : null}
                             <View style={[styles.divider, { backgroundColor: colors.cardBorder }]} />
 
-                            <View style={styles.ejercicioFooter}>
-                                {/* Tiempo */}
-                                <View style={[styles.footerBadge, { backgroundColor: colors.bg }]}>
-                                    <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
-                                    <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-                                        {Math.floor(ejercicio.duracion / 60)} min
-                                    </Text>
+                        return (
+                            <TouchableOpacity
+                                key={ejercicio.id}
+                                style={[styles.tarjetaEjercicio, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
+                                onPress={() => verDetalle(ejercicio)}
+                                activeOpacity={0.9}
+                            >
+                                {/* Video Thumbnail */}
+                                {thumbnailUrl && (
+                                    <View style={styles.thumbnailContainer}>
+                                        <Image
+                                            source={{ uri: thumbnailUrl }}
+                                            style={styles.thumbnailImage}
+                                            resizeMode="cover"
+                                        />
+                                        {/* Play button overlay */}
+                                        <View style={styles.playOverlay}>
+                                            <View style={styles.playButton}>
+                                                <Ionicons name="play" size={32} color="#FFFFFF" />
+                                            </View>
+                                        </View>
+                                        {/* Duration badge */}
+                                        <View style={styles.durationBadge}>
+                                            <Ionicons name="time-outline" size={12} color="#FFFFFF" />
+                                            <Text style={styles.durationBadgeText}>
+                                                {Math.floor(ejercicio.duracion / 60)} min
+                                            </Text>
+                                        </View>
+                                        {/* Category badge */}
+                                        <View style={styles.categoryBadge}>
+                                            <Ionicons name={getCategoryIcon(ejercicio.categoria)} size={12} color="#FFFFFF" />
+                                            <Text style={styles.categoryBadgeText}>{ejercicio.categoria}</Text>
+                                        </View>
+                                    </View>
+                                )}
+
+                                {/* Card content */}
+                                <View style={styles.cardContent}>
+                                    <View style={styles.tarjetaHeader}>
+                                        <View style={[styles.tarjetaIconContainer, { backgroundColor: colors.settingIconBg }]}>
+                                            <Ionicons
+                                                name={getCategoryIcon(ejercicio.categoria)}
+                                                size={28}
+                                                color={colors.isDark ? '#60A5FA' : '#2563EB'}
+                                            />
+                                        </View>
+                                        <View style={styles.tarjetaInfo}>
+                                            <Text style={[styles.ejercicioNombre, { color: colors.text }]} numberOfLines={2}>{ejercicio.nombre}</Text>
+                                            <Text style={[styles.ejercicioDescripcion, { color: colors.textSecondary }]} numberOfLines={2}>
+                                                {ejercicio.descripcion}
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={[styles.divider, { backgroundColor: colors.cardBorder }]} />
+
+                                    <View style={styles.ejercicioFooter}>
+                                        {/* Tiempo */}
+                                        <View style={[styles.footerBadge, { backgroundColor: colors.bg }]}>
+                                            <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
+                                            <Text style={[styles.footerText, { color: colors.textSecondary }]}>
+                                                {Math.floor(ejercicio.duracion / 60)} min
+                                            </Text>
+                                        </View>
+                                        {/* Dificultad */}
+                                        <View style={[styles.footerBadge, { backgroundColor: getDificultadColor(ejercicio.dificultad).bg }]}>
+                                            <Ionicons name="bar-chart-outline" size={16} color={getDificultadColor(ejercicio.dificultad).text} />
+                                            <Text style={[styles.dificultad, { color: getDificultadColor(ejercicio.dificultad).text }]}>
+                                                {ejercicio.dificultad}
+                                            </Text>
+                                        </View>
+                                        {/* Ver video */}
+                                        <View style={styles.verVideoBadge}>
+                                            <Ionicons name="play-circle" size={16} color="#FFFFFF" />
+                                            <Text style={styles.verVideoText}>Ver video</Text>
+                                        </View>
+                                    </View>
                                 </View>
-                                {/* Dificultad con color dinámico */}
-                                <View style={[styles.footerBadge, { backgroundColor: getDificultadColor(ejercicio.dificultad).bg }]}>
-                                    <Ionicons name="bar-chart-outline" size={16} color={getDificultadColor(ejercicio.dificultad).text} />
-                                    <Text style={[styles.dificultad, { color: getDificultadColor(ejercicio.dificultad).text }]}>
-                                        {ejercicio.dificultad}
-                                    </Text>
-                                </View>
-                                {/* Categoría sin texto redundante - solo ícono + nombre corto */}
-                                <View style={[styles.footerBadge, { backgroundColor: colors.bg }]}>
-                                    <Ionicons name={getCategoryIcon(ejercicio.categoria)} size={16} color={colors.textSecondary} />
-                                    <Text style={[styles.footerText, { color: colors.textSecondary }]} numberOfLines={1}>
-                                        {ejercicio.categoria}
-                                    </Text>
-                                </View>
-                            </View>
-                        </TouchableOpacity>
-                    ))
+                            </TouchableOpacity>
+                        );
+                    })
                 )}
             </ScrollView>
 
@@ -382,13 +463,13 @@ export default function EjerciciosScreen() {
 }
 
 const styles = StyleSheet.create({
-    safeArea: { 
-        flex: 1, 
-        backgroundColor: '#F8FAFC' 
+    safeArea: {
+        flex: 1,
+        backgroundColor: '#F8FAFC'
     },
-    centeredContainer: { 
-        flex: 1, 
-        justifyContent: 'center', 
+    centeredContainer: {
+        flex: 1,
+        justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: '#F8FAFC'
     },
@@ -425,9 +506,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 8,
     },
-    headerTitle: { 
-        fontSize: 36, 
-        fontWeight: '900', 
+    headerTitle: {
+        fontSize: 36,
+        fontWeight: '900',
         color: '#FFFFFF',
     },
     countBadge: {
@@ -447,7 +528,7 @@ const styles = StyleSheet.create({
         marginBottom: 24,
         fontWeight: '500',
     },
-    searchContainer: { 
+    searchContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#FFFFFF',
@@ -472,14 +553,14 @@ const styles = StyleSheet.create({
     searchIcon: {
         marginRight: 12,
     },
-    searchInput: { 
+    searchInput: {
         flex: 1,
-        fontSize: 18, 
+        fontSize: 18,
         color: '#1E293B',
         fontWeight: '500',
         height: '100%',
     },
-    container: { 
+    container: {
         flex: 1,
         marginTop: 16,
     },
@@ -571,22 +652,113 @@ const styles = StyleSheet.create({
         borderRadius: 24, 
         padding: 20, 
         marginBottom: 16,
+        overflow: 'hidden',
         ...Platform.select({
             ios: {
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.05,
-                shadowRadius: 12,
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: 0.08,
+                shadowRadius: 16,
             },
             android: {
-                elevation: 3,
+                elevation: 4,
             },
             web: {
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+                boxShadow: '0 6px 20px rgba(0, 0, 0, 0.08)',
             }
         }),
         borderWidth: 1,
         borderColor: '#E2E8F0',
+    },
+    thumbnailContainer: {
+        width: '100%',
+        height: 200,
+        position: 'relative',
+        backgroundColor: '#0F172A',
+    },
+    thumbnailImage: {
+        width: '100%',
+        height: '100%',
+    },
+    playOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    },
+    playButton: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: 'rgba(37, 99, 235, 0.9)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingLeft: 4,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#2563EB',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.4,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 8,
+            },
+            web: {
+                boxShadow: '0 4px 16px rgba(37, 99, 235, 0.4)',
+            }
+        }),
+    },
+    durationBadge: {
+        position: 'absolute',
+        bottom: 12,
+        right: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 8,
+        gap: 4,
+    },
+    durationBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    categoryBadge: {
+        position: 'absolute',
+        top: 12,
+        left: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(37, 99, 235, 0.85)',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 8,
+        gap: 4,
+    },
+    categoryBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    cardContent: {
+        padding: 20,
+    },
+    verVideoBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#2563EB',
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 12,
+        gap: 6,
+    },
+    verVideoText: {
+        color: '#FFFFFF',
+        fontSize: 13,
+        fontWeight: '700',
     },
     tarjetaHeader: {
         flexDirection: 'row',
@@ -603,15 +775,15 @@ const styles = StyleSheet.create({
     tarjetaInfo: {
         flex: 1,
     },
-    ejercicioNombre: { 
-        fontSize: 20, 
-        fontWeight: '800', 
-        color: '#1E293B', 
+    ejercicioNombre: {
+        fontSize: 20,
+        fontWeight: '800',
+        color: '#1E293B',
         marginBottom: 6,
     },
-    ejercicioDescripcion: { 
-        fontSize: 15, 
-        color: '#64748B', 
+    ejercicioDescripcion: {
+        fontSize: 15,
+        color: '#64748B',
         lineHeight: 22,
     },
     divider: {
@@ -619,8 +791,8 @@ const styles = StyleSheet.create({
         backgroundColor: '#F1F5F9',
         marginVertical: 16,
     },
-    ejercicioFooter: { 
-        flexDirection: 'row', 
+    ejercicioFooter: {
+        flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
     },
@@ -634,12 +806,12 @@ const styles = StyleSheet.create({
         gap: 6,
     },
     footerText: {
-        fontSize: 14, 
+        fontSize: 14,
         color: '#475569',
         fontWeight: '600',
     },
-    dificultad: { 
-        fontSize: 14, 
+    dificultad: {
+        fontSize: 14,
         fontWeight: '700',
     },
     categoryScroll: {
@@ -648,7 +820,7 @@ const styles = StyleSheet.create({
     },
     categoryContent: {
         paddingLeft: 24,
-        paddingRight: 100, 
+        paddingRight: 100,
         gap: 12,
         alignItems: 'center',
         paddingVertical: 12, // Give room for chips and shadows
@@ -679,7 +851,7 @@ const styles = StyleSheet.create({
         }),
     },
     categoryChipText: {
-        fontSize: 16, 
+        fontSize: 16,
         fontWeight: '700',
         color: '#DBEAFE',
     },

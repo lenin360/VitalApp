@@ -17,8 +17,41 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MenuInferior from '../components/MenuInferior';
 import { useTheme } from '../hooks/useTheme';
+import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 
 const { width } = Dimensions.get('window');
+
+// --- Componente de gráfica de pastel (donut) dinámica ---
+function DonutChart({ size = 120, strokeWidth = 12, percentage = 0, color = '#2563EB', label = '', value = '' }: {
+    size?: number; strokeWidth?: number; percentage?: number; color?: string; label?: string; value?: string;
+}) {
+    const radius = (size - strokeWidth) / 2;
+    const circumference = 2 * Math.PI * radius;
+    const strokeDashoffset = circumference - (circumference * Math.min(percentage, 100)) / 100;
+    const center = size / 2;
+
+    return (
+        <View style={{ alignItems: 'center' }}>
+            <Svg width={size} height={size}>
+                <Circle cx={center} cy={center} r={radius} stroke="#F1F5F9" strokeWidth={strokeWidth} fill="none" />
+                <Circle
+                    cx={center} cy={center} r={radius}
+                    stroke={color} strokeWidth={strokeWidth} fill="none"
+                    strokeDasharray={`${circumference}`}
+                    strokeDashoffset={strokeDashoffset}
+                    strokeLinecap="round"
+                    rotation="-90" origin={`${center}, ${center}`}
+                />
+                <SvgText x={center} y={center - 6} textAnchor="middle" fontSize={size * 0.22} fontWeight="900" fill="#1E293B">
+                    {value}
+                </SvgText>
+                <SvgText x={center} y={center + 14} textAnchor="middle" fontSize={size * 0.11} fontWeight="600" fill="#94A3B8">
+                    {label}
+                </SvgText>
+            </Svg>
+        </View>
+    );
+}
 
 export default function EstadisticasScreen() {
     const router = useRouter();
@@ -34,11 +67,11 @@ export default function EstadisticasScreen() {
         minutos: 0,
         progresoSemanal: [0, 0, 0, 0, 0, 0, 0],
         logros: [
-            { id: 1, nombre: 'Primer paso', icono: '🌟', desbloqueado: false, condicion: 1 },
-            { id: 2, nombre: '5 días seguidos', icono: '🔥', desbloqueado: false, condicion: 5 },
-            { id: 3, nombre: '10 ejercicios', icono: '🎯', desbloqueado: false, condicion: 10 },
-            { id: 4, nombre: '25 ejercicios', icono: '💎', desbloqueado: false, condicion: 25 },
-            { id: 5, nombre: '50 ejercicios', icono: '👑', desbloqueado: false, condicion: 50 },
+            { id: 1, nombre: 'Primer paso', icono: '🌟', desbloqueado: false, condicion: 1, tipo: 'ejercicios' },
+            { id: 2, nombre: '5 días seguidos', icono: '🔥', desbloqueado: false, condicion: 5, tipo: 'racha' },
+            { id: 3, nombre: '10 ejercicios', icono: '🎯', desbloqueado: false, condicion: 10, tipo: 'ejercicios' },
+            { id: 4, nombre: '25 ejercicios', icono: '💎', desbloqueado: false, condicion: 25, tipo: 'ejercicios' },
+            { id: 5, nombre: '50 ejercicios', icono: '👑', desbloqueado: false, condicion: 50, tipo: 'ejercicios' },
         ]
     });
 
@@ -237,47 +270,67 @@ export default function EstadisticasScreen() {
                     </View>
                 </View>
 
-                {/* Grid de estadísticas rápidas */}
-                <View style={styles.statsGrid}>
-                    <View style={styles.statCard}>
-                        <View style={[styles.statIconWrapper, { backgroundColor: '#FEF3C7' }]}>
-                            <Ionicons name="flame" size={32} color="#D97706" />
-                        </View>
-                        <Text style={styles.statNumber}>{estadisticas.racha}</Text>
-                        <Text style={styles.statLabel}>Días Seguidos</Text>
+                {/* Gráficas de Pastel Dinámicas */}
+                <View style={[styles.chartCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+                    <View style={styles.chartHeader}>
+                        <Ionicons name="pie-chart" size={24} color="#2563EB" />
+                        <Text style={[styles.chartTitle, { color: colors.text }]}>Resumen General</Text>
                     </View>
-                    <View style={styles.statCard}>
-                        <View style={[styles.statIconWrapper, { backgroundColor: '#EFF6FF' }]}>
-                            <Ionicons name="star" size={32} color="#2563EB" />
+                    <View style={styles.donutRow}>
+                        <View style={styles.donutItem}>
+                            <DonutChart
+                                size={110} strokeWidth={10}
+                                percentage={Math.min(estadisticas.racha * 10, 100)}
+                                color="#F59E0B" value={`${estadisticas.racha}`} label="días"
+                            />
+                            <View style={[styles.donutLabel, { backgroundColor: '#FEF3C7' }]}>
+                                <Ionicons name="flame" size={14} color="#D97706" />
+                                <Text style={[styles.donutLabelText, { color: '#D97706' }]}>Racha</Text>
+                            </View>
                         </View>
-                        <Text style={styles.statNumber}>{estadisticas.puntos}</Text>
-                        <Text style={styles.statLabel}>Puntos Totales</Text>
+                        <View style={styles.donutItem}>
+                            <DonutChart
+                                size={110} strokeWidth={10}
+                                percentage={Math.min(estadisticas.puntos / 5, 100)}
+                                color="#2563EB" value={`${estadisticas.puntos}`} label="pts"
+                            />
+                            <View style={[styles.donutLabel, { backgroundColor: '#EFF6FF' }]}>
+                                <Ionicons name="star" size={14} color="#2563EB" />
+                                <Text style={[styles.donutLabelText, { color: '#2563EB' }]}>Puntos</Text>
+                            </View>
+                        </View>
                     </View>
-                </View>
-
-                {/* Stats extra */}
-                <View style={styles.statsGrid}>
-                    <View style={styles.statCard}>
-                        <View style={[styles.statIconWrapper, { backgroundColor: '#FEE2E2' }]}>
-                            <Ionicons name="fitness" size={32} color="#DC2626" />
+                    <View style={styles.donutRow}>
+                        <View style={styles.donutItem}>
+                            <DonutChart
+                                size={110} strokeWidth={10}
+                                percentage={Math.min(estadisticas.calorias / 3, 100)}
+                                color="#EF4444" value={`${estadisticas.calorias}`} label="kcal"
+                            />
+                            <View style={[styles.donutLabel, { backgroundColor: '#FEE2E2' }]}>
+                                <Ionicons name="fitness" size={14} color="#DC2626" />
+                                <Text style={[styles.donutLabelText, { color: '#DC2626' }]}>Calorías</Text>
+                            </View>
                         </View>
-                        <Text style={styles.statNumber}>{estadisticas.calorias}</Text>
-                        <Text style={styles.statLabel}>Calorías</Text>
-                    </View>
-                    <View style={styles.statCard}>
-                        <View style={[styles.statIconWrapper, { backgroundColor: '#F0FDF4' }]}>
-                            <Ionicons name="time" size={32} color="#16A34A" />
+                        <View style={styles.donutItem}>
+                            <DonutChart
+                                size={110} strokeWidth={10}
+                                percentage={Math.min(estadisticas.minutos / 0.6, 100)}
+                                color="#10B981" value={`${estadisticas.minutos}`} label="min"
+                            />
+                            <View style={[styles.donutLabel, { backgroundColor: '#F0FDF4' }]}>
+                                <Ionicons name="time" size={14} color="#16A34A" />
+                                <Text style={[styles.donutLabelText, { color: '#16A34A' }]}>Minutos</Text>
+                            </View>
                         </View>
-                        <Text style={styles.statNumber}>{estadisticas.minutos}</Text>
-                        <Text style={styles.statLabel}>Minutos</Text>
                     </View>
                 </View>
 
                 {/* Gráfico de actividad semanal */}
-                <View style={styles.chartCard}>
+                <View style={[styles.chartCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
                     <View style={styles.chartHeader}>
                         <Ionicons name="bar-chart" size={24} color="#1E293B" />
-                        <Text style={styles.chartTitle}>Actividad Semanal</Text>
+                        <Text style={[styles.chartTitle, { color: colors.text }]}>Actividad Semanal</Text>
                     </View>
                     
                     {estadisticas.progresoSemanal.every(v => v === 0) ? (
@@ -295,10 +348,10 @@ export default function EstadisticasScreen() {
                                         {valor > 0 ? valor : ''}
                                     </Text>
                                     <View style={styles.barOuterContainer}>
-                                        <View style={[
-                                            styles.bar,
-                                            { height: `${Math.max((valor / maxProgreso) * 100, 5)}%`, backgroundColor: valor > 0 ? '#2563EB' : '#E2E8F0' }
-                                        ]} />
+                                        <LinearGradient
+                                            colors={valor > 0 ? ['#2563EB', '#60A5FA'] : ['#E2E8F0', '#E2E8F0']}
+                                            style={[styles.bar, { height: `${Math.max((valor / maxProgreso) * 100, 5)}%` }]}
+                                        />
                                     </View>
                                     <Text style={[styles.barLabel, valor > 0 && styles.barLabelActive]}>
                                         {diasSemana[index]}
@@ -485,6 +538,10 @@ const styles = StyleSheet.create({
     bar: { width: '100%', borderRadius: 16 },
     barLabel: { fontSize: 15, color: '#94A3B8', fontWeight: '700' },
     barLabelActive: { color: '#1E293B' },
+    donutRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 20 },
+    donutItem: { alignItems: 'center' },
+    donutLabel: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginTop: 8, gap: 4 },
+    donutLabelText: { fontSize: 13, fontWeight: '700' },
     achievementsCard: { 
         backgroundColor: '#FFFFFF', marginHorizontal: 20, marginBottom: 24, padding: 24, borderRadius: 24,
         ...Platform.select({
