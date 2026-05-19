@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, 
-  SafeAreaView, Dimensions, Alert, RefreshControl, StatusBar, Platform
+  SafeAreaView, Alert, RefreshControl, StatusBar, Platform
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Ionicons, MaterialCommunityIcons, FontAwesome5, Entypo } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5, Entypo } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MenuInferior from '../components/MenuInferior';
@@ -12,7 +12,6 @@ import { useTheme } from '../hooks/useTheme';
 import { getVideoIdForExercise, DAILY_TIPS } from '../constants/exercises';
 import { API_URL } from '../constants/config';
 
-const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -30,6 +29,8 @@ export default function HomeScreen() {
   const [peso, setPeso] = useState(58);
   const [nombreUsuario, setNombreUsuario] = useState('Usuario');
   const [userId, setUserId] = useState<string | null>(null);   // id_usuario de la BD
+  const [userConditions, setUserConditions] = useState<string[]>([]);
+  const [conditionSummary, setConditionSummary] = useState('Ninguna condición registrada');
   const [refreshing, setRefreshing] = useState(false);
   const [completadosHoy, setCompletadosHoy] = useState(0);
   const [hydration, setHydration] = useState(0);
@@ -61,6 +62,14 @@ export default function HomeScreen() {
       if (userIdGuardado)    setUserId(userIdGuardado);
       if (completadosHoyGuardados) setCompletadosHoy(parseInt(completadosHoyGuardados));
 
+      const condicionesGuardadas = await AsyncStorage.getItem('userConditions');
+      if (condicionesGuardadas) {
+        const condiciones = JSON.parse(condicionesGuardadas);
+        const condicionesArray = Array.isArray(condiciones) ? condiciones : [];
+        setUserConditions(condicionesArray);
+        setConditionSummary(condicionesArray.length > 0 ? condicionesArray.join(', ') : 'Ninguna condición registrada');
+      }
+
       // Peso: se obtiene del backend con el id_usuario real
       if (userIdGuardado) {
         try {
@@ -70,8 +79,8 @@ export default function HomeScreen() {
             setPeso(parseFloat(data.user.peso));
             await AsyncStorage.setItem('userWeight', data.user.peso.toString());
           }
-        } catch (_) {
-          // Sin conexión: intentar valor cacheado
+        } catch (error) {
+          console.log('Sin conexión al backend, usando peso cacheado:', error);
           const pesoGuardado = await AsyncStorage.getItem('userWeight');
           if (pesoGuardado) setPeso(parseFloat(pesoGuardado));
         }
@@ -96,53 +105,9 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  const guardarProgreso = async (idVideo: number = 1, duracionSegundos: number = 300, caloriasQuemadas: number = 150) => {
-    const nuevasStats = {
-      ...weeklyStats,
-      exercises: weeklyStats.exercises + 1,
-      calories: weeklyStats.calories + caloriasQuemadas,
-      minutes: weeklyStats.minutes + Math.round(duracionSegundos / 60),
-      weeklyGoal: Math.min(weeklyStats.weeklyGoal + 1, weeklyStats.totalGoal)
-    };
-
-    const nuevoPorcentaje = nuevasStats.totalGoal > 0
-      ? Math.round((nuevasStats.weeklyGoal / nuevasStats.totalGoal) * 100)
-      : 0;
-
-    const nuevosCompletados = completadosHoy + 1;
-
-    setWeeklyStats(nuevasStats);
-    setProgressPercentage(nuevoPorcentaje);
-    setCompletadosHoy(nuevosCompletados);
-
-    await AsyncStorage.setItem('userStats', JSON.stringify(nuevasStats));
-    await AsyncStorage.setItem('completadosHoy', nuevosCompletados.toString());
-
-    // Registrar en la BD — tabla ejercicio_realizado
-    if (userId) {
-      try {
-        await fetch(`${API_URL}/ejercicio-realizado`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id_usuario: parseInt(userId),
-            id_video: idVideo,
-            duracion_segundos: duracionSegundos,
-            calorias_quemadas: caloriasQuemadas,
-            completado: 1
-          })
-        });
-      } catch (e) {
-        console.log('No se pudo registrar ejercicio en BD:', e);
-      }
-    }
-
-    if (nuevasStats.weeklyGoal >= nuevasStats.totalGoal) {
-      setTimeout(() => {
-        Alert.alert('FELICIDADES', 'Has completado el objetivo semanal.');
-      }, 500);
-    }
-  };
+  useEffect(() => {
+    setConditionSummary(userConditions.length > 0 ? userConditions.join(', ') : 'Ninguna condición registrada');
+  }, [userConditions]);
 
   const cambiarHydration = async (delta: number) => {
     const nuevo = Math.max(0, Math.min(12, hydration + delta));
@@ -263,7 +228,34 @@ export default function HomeScreen() {
 
   // Seleccionar rutina del día basada en el día de la semana
   const dayOfWeek = new Date().getDay();
-  const currentWorkout = allRoutines[dayOfWeek % allRoutines.length];
+
+  const hasCondition = (keyword: string) =>
+    userConditions.some((condition) =>
+      condition.toLowerCase().includes(keyword.toLowerCase())
+    );
+
+  const hasHeartCondition = hasCondition('corazón') || hasCondition('corazon') || hasCondition('problemas de corazón') || hasCondition('hipertensión');
+  const hasCancer = hasCondition('cáncer') || hasCondition('cancer');
+  const hasDiabetes = hasCondition('diabetes');
+  const hasHypertension = hasCondition('hipertensión') || hasCondition('hipertension');
+  const hasArthritis = hasCondition('artritis');
+
+  const healthConditionNote = userConditions.length
+    ? `Rutinas adaptadas a: ${conditionSummary}`
+    : 'Registra tus condiciones en Enfermedades para obtener recomendaciones personalizadas.';
+
+  const safeRoutineExcludes = [
+    ...(hasHeartCondition || hasCancer || hasHypertension ? ['CARDIO LIGERO', 'PESAS LIGERAS'] : []),
+    ...(hasArthritis ? ['PESAS LIGERAS'] : [])
+  ];
+
+  const safeRoutines = allRoutines.filter(
+    (routine) => !safeRoutineExcludes.includes(routine.title)
+  );
+
+  const filteredRoutines = safeRoutines.length > 0 ? safeRoutines : allRoutines;
+
+  const currentWorkout = filteredRoutines[dayOfWeek % filteredRoutines.length];
 
   // Recomendados: las OTRAS rutinas que NO son la del día
   const allDiscoveryWorkouts = [
@@ -290,6 +282,21 @@ export default function HomeScreen() {
     ...allDiscoveryWorkouts.slice(startIdx),
     ...allDiscoveryWorkouts.slice(0, startIdx)
   ].slice(0, 4);
+
+  const discoveryWorkoutsToShow = discoveryWorkouts.filter((workout) => {
+    if (hasHeartCondition || hasHypertension || hasCancer) {
+      return workout.intensity === 'Baja';
+    }
+    if (hasArthritis) {
+      return workout.intensity === 'Baja' && workout.icon !== 'barbell' && workout.icon !== 'fitness';
+    }
+    if (hasDiabetes) {
+      return workout.intensity !== 'Media' ? true : workout.icon !== 'walk';
+    }
+    return true;
+  });
+
+  const recommendedWorkouts = discoveryWorkoutsToShow.length > 0 ? discoveryWorkoutsToShow : discoveryWorkouts;
 
   // Calendario dinámico basado en la semana actual
   const today = new Date();
@@ -612,7 +619,7 @@ export default function HomeScreen() {
           <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>Rutinas adaptadas a tu ritmo</Text>
           
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.discoverScroll}>
-            {discoveryWorkouts.map((workout, index) => (
+            {recommendedWorkouts.map((workout, index) => (
               <TouchableOpacity 
                 key={index} 
                 style={[styles.discoverCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]} 
@@ -674,6 +681,11 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                 ))}
             </ScrollView>
+        </View>
+
+        {/* Información de salud */}
+        <View style={[styles.healthInfoCard, { backgroundColor: colors.isDark ? '#111827' : '#E0F2FE', borderColor: colors.cardBorder }]}> 
+          <Text style={[styles.healthInfoText, { color: colors.text }]}>{healthConditionNote}</Text>
         </View>
 
         {/* Rutina del Día */}
@@ -1109,6 +1121,18 @@ const styles = StyleSheet.create({
   motivationCard: {
     padding: 20, borderRadius: 20,
     borderWidth: 1, borderColor: '#FEF3C7',
+  },
+  healthInfoCard: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: 20,
+    borderRadius: 24,
+    borderWidth: 1,
+  },
+  healthInfoText: {
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 22,
   },
   motivationHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   motivationTitle: { fontSize: 16, fontWeight: '800', color: '#B45309' },

@@ -47,17 +47,22 @@ export default function DetalleEjercicioScreen() {
         return () => clearInterval(interval);
     }, [cargando]);
 
+    const getParamString = (value: string | string[] | undefined): string => {
+        if (Array.isArray(value)) return value[0] || '';
+        return value || '';
+    };
+
     // Parsing params for routine support
-    const routineData = params.routine ? JSON.parse(params.routine as string) : null;
-    const currentIndex = params.index ? parseInt(params.index as string) : 0;
+    const routineData = params.routine ? JSON.parse(getParamString(params.routine)) : null;
+    const currentIndex = parseInt(getParamString(params.index)) || 0;
 
     const ejercicio = {
-        id: params.id as string,
-        nombre: (params.nombre as string) || 'Ejercicio',
-        descripcion: params.descripcion as string,
-        duracion: parseInt(params.duracion as string) || 60,
-        dificultad: (params.dificultad as string) || 'Normal',
-        url: decodeURIComponent((params.url as string) || '')
+        id: getParamString(params.id),
+        nombre: getParamString(params.nombre) || 'Ejercicio',
+        descripcion: getParamString(params.descripcion),
+        duracion: parseInt(getParamString(params.duracion)) || 60,
+        dificultad: getParamString(params.dificultad) || 'Normal',
+        url: decodeURIComponent(getParamString(params.url))
     };
 
     // Anti-trampa: requiere ver al menos 1/3 de la duración real del video
