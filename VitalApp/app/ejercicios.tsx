@@ -343,35 +343,9 @@ export default function EjerciciosScreen() {
                         <Text style={styles.emptySubtext}>Prueba buscando con otras palabras</Text>
                     </View>
                 ) : (
-                    visibleEjercicios.map((ejercicio, index) => (
-                        <TouchableOpacity 
-                            key={ejercicio.id} 
-                            style={[styles.tarjetaEjercicio, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
-                            onPress={() => verDetalle(ejercicio)}
-                            activeOpacity={0.9}
-                        >
-                            <View style={styles.tarjetaHeader}>
-                                <View style={[styles.tarjetaIconContainer, { backgroundColor: colors.settingIconBg }]}>
-                                    <Ionicons 
-                                        name={getCategoryIcon(ejercicio.categoria)} 
-                                        size={32} 
-                                        color={colors.isDark ? '#60A5FA' : '#2563EB'} 
-                                    />
-                                </View>
-                                <View style={styles.tarjetaInfo}>
-                                    <Text style={[styles.ejercicioNombre, { color: colors.text }]} numberOfLines={1}>{ejercicio.nombre}</Text>
-                                    <Text style={[styles.ejercicioDescripcion, { color: colors.textSecondary }]} numberOfLines={2}>
-                                        {ejercicio.descripcion}
-                                    </Text>
-                                </View>
-                            </View>
-                            {getExerciseAdvice(ejercicio) ? (
-                                <View style={[styles.warningBanner, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}> 
-                                    <Ionicons name="warning-outline" size={16} color="#B91C1C" />
-                                    <Text style={styles.warningText}>{getExerciseAdvice(ejercicio)}</Text>
-                                </View>
-                            ) : null}
-                            <View style={[styles.divider, { backgroundColor: colors.cardBorder }]} />
+                    visibleEjercicios.map((ejercicio, index) => {
+                        const videoId = getVideoId(ejercicio);
+                        const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
 
                         return (
                             <TouchableOpacity
@@ -426,6 +400,13 @@ export default function EjerciciosScreen() {
                                             </Text>
                                         </View>
                                     </View>
+
+                                    {getExerciseAdvice(ejercicio) ? (
+                                        <View style={[styles.warningBanner, { backgroundColor: '#FEE2E2', borderColor: '#FECACA', marginTop: 12, marginHorizontal: 0 }]}> 
+                                            <Ionicons name="warning-outline" size={16} color="#B91C1C" />
+                                            <Text style={styles.warningText}>{getExerciseAdvice(ejercicio)}</Text>
+                                        </View>
+                                    ) : null}
 
                                     <View style={[styles.divider, { backgroundColor: colors.cardBorder }]} />
 
