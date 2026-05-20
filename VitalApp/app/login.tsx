@@ -1,18 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
-    View,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    StyleSheet,
-    SafeAreaView,
-    KeyboardAvoidingView,
-    Platform,
-    Alert,
-    ActivityIndicator,
-    ScrollView,
-    StatusBar,
-    Dimensions
+    View, Text, TextInput, TouchableOpacity, StyleSheet,
+    SafeAreaView, KeyboardAvoidingView, Platform, Alert,
+    ActivityIndicator, ScrollView, StatusBar, Dimensions,
+    Animated, Easing,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,693 +12,699 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../constants/config';
 
 const isWeb = Platform.OS === 'web';
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SW, height: SH } = Dimensions.get('window');
+
+// Imagen HD premium real — Adulto mayor activo
+const BG_IMAGE = require('../assets/images/senior_fitness_bg.png');
+
+// ── Fondo premium animado (MEMOIZADO para evitar re-renders) ─────────────────
+const AnimatedBackground = React.memo(() => {
+    const imgScale = useRef(new Animated.Value(1.0)).current;
+    const imgX = useRef(new Animated.Value(0)).current;
+    const shimmer = useRef(new Animated.Value(-SW)).current;
+
+    // Usar useRef para las partículas
+    const particlesRef = useRef(
+        Array.from({ length: 5 }, () => ({
+            y: new Animated.Value(SH),
+        }))
+    );
+
+    useEffect(() => {
+        // Ken Burns zoom
+        const zoomAnimation = Animated.loop(
+            Animated.sequence([
+                Animated.timing(imgScale, {
+                    toValue: 1.06,
+                    duration: 15000,
+                    easing: Easing.inOut(Easing.sin),
+                    useNativeDriver: true
+                }),
+                Animated.timing(imgScale, {
+                    toValue: 1.00,
+                    duration: 15000,
+                    easing: Easing.inOut(Easing.sin),
+                    useNativeDriver: true
+                }),
+            ])
+        );
+
+        // Paneo sutil
+        const panAnimation = Animated.loop(
+            Animated.sequence([
+                Animated.timing(imgX, {
+                    toValue: -10,
+                    duration: 18000,
+                    easing: Easing.inOut(Easing.sin),
+                    useNativeDriver: true
+                }),
+                Animated.timing(imgX, {
+                    toValue: 10,
+                    duration: 18000,
+                    easing: Easing.inOut(Easing.sin),
+                    useNativeDriver: true
+                }),
+            ])
+        );
+
+        // Destello de luz diagonal (shimmer)
+        const shimmerAnimation = Animated.loop(
+            Animated.sequence([
+                Animated.delay(4000),
+                Animated.timing(shimmer, {
+                    toValue: SW * 2,
+                    duration: 2500,
+                    easing: Easing.inOut(Easing.ease),
+                    useNativeDriver: true
+                }),
+                Animated.timing(shimmer, {
+                    toValue: -SW,
+                    duration: 0,
+                    useNativeDriver: true
+                }),
+            ])
+        );
+
+        // Partículas
+        const particleAnimations = particlesRef.current.map((particle, index) => {
+            return Animated.loop(
+                Animated.sequence([
+                    Animated.delay(index * 1500),
+                    Animated.timing(particle.y, {
+                        toValue: -SH * 0.4,
+                        duration: 7000 + index * 1000,
+                        easing: Easing.linear,
+                        useNativeDriver: true
+                    }),
+                    Animated.timing(particle.y, {
+                        toValue: SH,
+                        duration: 0,
+                        useNativeDriver: true
+                    }),
+                ])
+            );
+        });
+
+        zoomAnimation.start();
+        panAnimation.start();
+        shimmerAnimation.start();
+        particleAnimations.forEach(anim => anim.start());
+
+        return () => {
+            zoomAnimation.stop();
+            panAnimation.stop();
+            shimmerAnimation.stop();
+            particleAnimations.forEach(anim => anim.stop());
+        };
+    }, []);
+
+    const particles = useMemo(() => [
+        { l: SW * 0.10, s: 4, o: 0.35 },
+        { l: SW * 0.30, s: 3, o: 0.25 },
+        { l: SW * 0.55, s: 5, o: 0.40 },
+        { l: SW * 0.75, s: 3, o: 0.30 },
+        { l: SW * 0.90, s: 4, o: 0.20 },
+    ], []);
+
+    return (
+        <>
+            {/* Color base navy */}
+            <LinearGradient
+                colors={['#010B1E', '#061440', '#0B2560', '#050E30']}
+                locations={[0, 0.3, 0.6, 1]}
+                style={StyleSheet.absoluteFillObject}
+            />
+
+            {/* Imagen con movimiento Ken Burns */}
+            <Animated.View style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: SH,
+                transform: [{ scale: imgScale }, { translateX: imgX }],
+            }}>
+                <Animated.Image
+                    source={BG_IMAGE}
+                    style={{ width: '100%', height: '100%' }}
+                    resizeMode="cover"
+                    blurRadius={0}
+                />
+                {/* Difuminado suave hacia abajo */}
+                <LinearGradient
+                    colors={['transparent', 'rgba(1,11,30,0.15)', 'rgba(1,11,30,0.40)', '#010B1E']}
+                    locations={[0, 0.4, 0.75, 1]}
+                    style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: isWeb ? '40%' : '60%' }}
+                />
+            </Animated.View>
+
+            {/* Overlay cinematográfico */}
+            <LinearGradient
+                colors={['rgba(5,30,90,0.55)', 'rgba(5,20,60,0.70)', 'rgba(3,10,35,0.85)', 'rgba(2,8,25,0.95)']}
+                locations={[0, 0.3, 0.65, 1]}
+                style={StyleSheet.absoluteFillObject}
+            />
+
+            {/* Viñeta lateral */}
+            <LinearGradient
+                colors={['rgba(2,8,25,0.6)', 'transparent', 'transparent', 'rgba(2,8,25,0.6)']}
+                locations={[0, 0.18, 0.82, 1]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={StyleSheet.absoluteFillObject}
+            />
+
+            {/* Destello diagonal de luz */}
+            <Animated.View style={{
+                position: 'absolute',
+                top: 0,
+                width: SW * 0.15,
+                height: SH * 1.5,
+                backgroundColor: 'rgba(255,255,255,0.04)',
+                transform: [{ translateX: shimmer }, { rotate: '25deg' }],
+            }} />
+
+            {/* Partículas flotantes */}
+            {particles.map((p, i) => (
+                <Animated.View
+                    key={i}
+                    style={{
+                        position: 'absolute',
+                        left: p.l,
+                        bottom: 0,
+                        width: p.s,
+                        height: p.s,
+                        borderRadius: p.s / 2,
+                        backgroundColor: `rgba(96,165,250,${p.o})`,
+                        transform: [{ translateY: particlesRef.current[i].y }],
+                    }}
+                />
+            ))}
+
+            {/* Tenue gradiente azul en la base */}
+            <LinearGradient
+                colors={['transparent', 'transparent', 'rgba(20,60,180,0.10)', 'rgba(10,30,120,0.18)']}
+                locations={[0, 0.65, 0.88, 1]}
+                style={StyleSheet.absoluteFillObject}
+            />
+        </>
+    );
+});
+
+// ── Componentes memoizados ────────────────────────────────────────────────────
+const Lab = React.memo(({ text }: { text: string }) => (
+    <Text style={st.label}>{text}</Text>
+));
+
+const Inp = React.memo(({ icon, ph, val, set, secure, ac, kb, multi, rIcon, rPress }: any) => (
+    <View style={[st.inputWrap, multi && st.inputMulti]}>
+        <Ionicons name={icon} size={18} color="rgba(150,180,255,0.55)" style={{ marginRight: 10 }} />
+        <TextInput
+            style={[
+                st.input,
+                multi && { height: 72, textAlignVertical: 'top', paddingTop: 10 },
+                ...(isWeb ? [{ outlineStyle: 'none' as any }] : [])
+            ]}
+            placeholder={ph}
+            placeholderTextColor="rgba(150,180,255,0.30)"
+            value={val}
+            onChangeText={set}
+            secureTextEntry={secure}
+            autoCapitalize={ac}
+            keyboardType={kb}
+            multiline={multi}
+        />
+        {rIcon && (
+            <TouchableOpacity onPress={rPress} style={{ padding: 4 }}>
+                <Ionicons name={rIcon} size={18} color="rgba(150,180,255,0.55)" />
+            </TouchableOpacity>
+        )}
+    </View>
+));
+
+// ── Background wrapper memoizado ──────────────────────────────────────────────
+const Background = React.memo(({ children }: { children: React.ReactNode }) => (
+    <View style={st.root}>
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+        <AnimatedBackground />
+        {children}
+    </View>
+));
 
 export default function LoginScreen() {
-    // --- Login ---
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPass, setShowPass] = useState(false);
     const [isRegistering, setIsRegistering] = useState(false);
     const [cargando, setCargando] = useState(false);
     const [errorLogin, setErrorLogin] = useState(false);
-
-    // --- Registro: campos de la tabla `usuario` ---
     const [nombre, setNombre] = useState('');
     const [fechaNacimiento, setFechaNacimiento] = useState('');
     const [peso, setPeso] = useState('');
     const [altura, setAltura] = useState('');
-    const [genero, setGenero] = useState<'M' | 'F' | 'Otro'>('Otro');   // enum BD: M, F, Otro
+    const [genero, setGenero] = useState<'M' | 'F' | 'Otro'>('Otro');
     const [telefono, setTelefono] = useState('');
     const [nivelActividad, setNivelActividad] = useState<'sedentario' | 'ligero' | 'moderado' | 'activo'>('sedentario');
     const [condicionesMedicas, setCondicionesMedicas] = useState('');
     const [restricciones, setRestricciones] = useState('');
-
     const router = useRouter();
 
-    // -----------------------------------------------
-    // LOGIN
-    // -----------------------------------------------
+    // ── LOGIN ─────────────────────────────────────────────────────────────────
     const handleLogin = async () => {
-        console.log('========== INICIO DE LOGIN ==========');
-
         if (!email || !password) {
-            Alert.alert('Faltan datos', 'Por favor ingresa tu correo y contraseña para continuar.');
+            Alert.alert('Faltan datos', 'Ingresa tu correo y contraseña.');
             return;
         }
-
         setCargando(true);
-
         try {
-            const url = `${API_URL}/login`;
-            // El campo en la BD y en el backend se llama password_hash
-            const body = JSON.stringify({ email, password_hash: password });
-            console.log('Petición a:', url);
-
-            const response = await fetch(url, {
+            const res = await fetch(`${API_URL}/login`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ email, password_hash: password }),
             });
-
-            const data = await response.json();
-            console.log('Respuesta:', data);
-
+            const data = await res.json();
             if (data.success) {
-                const user = data.user;
-                // La PK en la BD es id_usuario, no id
-                await AsyncStorage.setItem('userId',    user.id_usuario.toString());
-                await AsyncStorage.setItem('userName',  user.nombre   || '');
-                await AsyncStorage.setItem('userEmail', user.email    || '');
-                await AsyncStorage.setItem('userAge',   (user.edad    ?? '').toString());
-                await AsyncStorage.setItem('userRol',   user.rol      || 'usuario');
-                // Redirigir según rol: admin → pantalla de administrador
-                router.replace(user.rol === 'admin' ? '/admin' : '/home');
+                const u = data.user;
+                await AsyncStorage.setItem('userId', u.id_usuario.toString());
+                await AsyncStorage.setItem('userName', u.nombre || '');
+                await AsyncStorage.setItem('userEmail', u.email || '');
+                await AsyncStorage.setItem('userAge', (u.edad ?? '').toString());
+                await AsyncStorage.setItem('userRol', u.rol || 'usuario');
+                router.replace(u.rol === 'admin' ? '/admin' : '/home');
             } else {
                 setErrorLogin(true);
             }
-        } catch (error: any) {
-            console.error('Error en login:', error.message);
-            Alert.alert('Error de conexión', `No pudimos conectarnos. Verifica tu internet e intenta de nuevo.\n${error.message}`);
+        } catch (e: any) {
+            Alert.alert('Error de conexión', e.message);
         } finally {
             setCargando(false);
         }
-        console.log('========== FIN DE LOGIN ==========');
     };
 
-    // -----------------------------------------------
-    // REGISTRO
-    // -----------------------------------------------
+    // ── REGISTRO ──────────────────────────────────────────────────────────────
     const handleRegister = async () => {
-        console.log('========== INICIO DE REGISTRO ==========');
-
-        // Campos obligatorios según la BD (NOT NULL sin DEFAULT)
         if (!nombre || !email || !password || !fechaNacimiento || !peso) {
-            Alert.alert('Faltan datos', 'Nombre, correo, contraseña, fecha de nacimiento y peso son obligatorios.');
+            Alert.alert('Faltan datos', 'Nombre, correo, contraseña, fecha y peso son obligatorios.');
             return;
         }
-
-        // Validar formato fecha AAAA-MM-DD
-        const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!fechaRegex.test(fechaNacimiento)) {
-            Alert.alert('Fecha inválida', 'Usa el formato AAAA-MM-DD, por ejemplo: 1955-05-20');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaNacimiento)) {
+            Alert.alert('Fecha inválida', 'Usa AAAA-MM-DD');
             return;
         }
-
         setCargando(true);
-
         try {
-            const url = `${API_URL}/register`;
-            const body = JSON.stringify({
-                nombre,
-                email,
-                password_hash: password,              // campo real en la BD
-                fecha_nacimiento: fechaNacimiento,
-                peso: parseFloat(peso),
-                altura: altura ? parseFloat(altura) : null,
-                genero,                               // enum: 'M' | 'F' | 'Otro'
-                telefono: telefono || null,
-                nivel_actividad: nivelActividad,      // enum: sedentario | ligero | moderado | activo
-                condiciones_medicas: condicionesMedicas || null,
-                restricciones: restricciones || null,
-                // 'edad' NO se envía: columna VIRTUAL generada desde fecha_nacimiento
-            });
-            console.log('Petición a:', url);
-
-            const response = await fetch(url, {
+            const res = await fetch(`${API_URL}/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body
+                body: JSON.stringify({
+                    nombre, email, password_hash: password, fecha_nacimiento: fechaNacimiento,
+                    peso: parseFloat(peso), altura: altura ? parseFloat(altura) : null,
+                    genero, telefono: telefono || null, nivel_actividad: nivelActividad,
+                    condiciones_medicas: condicionesMedicas || null, restricciones: restricciones || null,
+                }),
             });
-
-            const data = await response.json();
-            console.log('Respuesta:', data);
-
+            const data = await res.json();
             if (data.success) {
-                Alert.alert(
-                    '¡Cuenta creada!',
-                    'Bienvenido a VitalApp. Ahora puedes iniciar sesión con tu correo y contraseña.',
-                    [{ text: 'Continuar' }]
-                );
-                // Limpiar formulario y volver a login
+                Alert.alert('¡Cuenta creada!', 'Ya puedes iniciar sesión.', [{ text: 'OK' }]);
                 setIsRegistering(false);
-                setNombre('');
-                setFechaNacimiento('');
-                setPeso('');
-                setAltura('');
-                setGenero('Otro');
-                setTelefono('');
-                setNivelActividad('sedentario');
-                setCondicionesMedicas('');
-                setRestricciones('');
-                setPassword('');
-                setEmail('');
+                setNombre(''); setFechaNacimiento(''); setPeso(''); setAltura('');
+                setGenero('Otro'); setTelefono(''); setNivelActividad('sedentario');
+                setCondicionesMedicas(''); setRestricciones(''); setPassword(''); setEmail('');
             } else {
-                Alert.alert('Error al registrar', data.message || 'No se pudo crear la cuenta.');
+                Alert.alert('Error', data.message || 'No se pudo crear la cuenta.');
             }
-        } catch (error: any) {
-            console.error('Error en registro:', error.message);
-            Alert.alert('Error de conexión', 'No pudimos conectarnos. Verifica tu internet e intenta de nuevo.');
+        } catch (e: any) {
+            Alert.alert('Error de conexión', e.message);
         } finally {
             setCargando(false);
         }
-        console.log('========== FIN DE REGISTRO ==========');
     };
 
-    // -----------------------------------------------
-    // PANTALLA DE ERROR DE CREDENCIALES
-    // -----------------------------------------------
-    if (errorLogin) {
-        return (
-            <SafeAreaView style={styles.safeArea}>
-                <StatusBar barStyle="light-content" backgroundColor="#1E3A8A" />
-                <LinearGradient
-                    colors={['#1E3A8A', '#2563EB', '#F8FAFC']}
-                    locations={[0, 0.4, 0.4]}
-                    style={styles.gradientBackground}
-                >
-                    <View style={styles.errorContainer}>
-                        <View style={styles.errorCard}>
-                            <View style={styles.errorIconCircle}>
-                                <Ionicons name="close-circle" size={isWeb ? 56 : 72} color="#EF4444" />
-                            </View>
-                            <Text style={styles.errorTitle}>Acceso denegado</Text>
-                            <Text style={styles.errorMessage}>
-                                Usuario o contraseña incorrecta
-                            </Text>
-                            <TouchableOpacity
-                                style={styles.errorButton}
-                                onPress={() => {
-                                    setErrorLogin(false);
-                                    setPassword('');
-                                }}
-                                activeOpacity={0.8}
-                            >
-                                <Ionicons name="arrow-back" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                                <Text style={styles.errorButtonText}>Volver al login</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </LinearGradient>
-            </SafeAreaView>
-        );
-    }
+    // ── PANTALLA ERROR ────────────────────────────────────────────────────────
+    if (errorLogin) return (
+        <Background>
+            <View style={st.centerFull}>
+                <View style={st.card}>
+                    <Ionicons name="close-circle" size={60} color="#EF4444" style={{ alignSelf: 'center', marginBottom: 16 }} />
+                    <Text style={st.cardTitle}>Acceso denegado</Text>
+                    <Text style={st.cardSub}>El correo o la contraseña no son correctos.</Text>
+                    <TouchableOpacity style={st.btnWrap} onPress={() => { setErrorLogin(false); setPassword(''); }} activeOpacity={0.85}>
+                        <LinearGradient colors={['#1E5FE6', '#1340A0']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={st.btnGrad}>
+                            <Ionicons name="arrow-back" size={20} color="#fff" style={{ marginRight: 8 }} />
+                            <Text style={st.btnTxt}>Volver al login</Text>
+                        </LinearGradient>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </Background>
+    );
 
-    // -----------------------------------------------
-    // RENDER
-    // -----------------------------------------------
+    // ── RENDER PRINCIPAL ──────────────────────────────────────────────────────
     return (
-        <SafeAreaView style={styles.safeArea}>
-            <StatusBar barStyle="light-content" backgroundColor="#1E3A8A" />
-            <LinearGradient
-                colors={['#1E3A8A', '#2563EB', '#F8FAFC']}
-                locations={[0, 0.4, 0.4]}
-                style={styles.gradientBackground}
+        <Background>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={{ flex: 1 }}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
             >
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    style={styles.container}
+                <ScrollView
+                    contentContainerStyle={st.scroll}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    bounces={false}
                 >
-                    <ScrollView
-                        contentContainerStyle={styles.scrollContent}
-                        showsVerticalScrollIndicator={false}
-                    >
-                        {/* CABECERA */}
-                        <View style={styles.header}>
-                            <View style={styles.logoCircle}>
-                                <Ionicons name="fitness" size={isWeb ? 30 : 48} color="#2563EB" />
-                            </View>
-                            <Text style={styles.titulo}>VitalApp</Text>
-                            <Text style={styles.subtitulo}>Tu bienestar, cada día</Text>
+                    {/* Logo */}
+                    <View style={st.logoZone}>
+                        <View style={st.logoCircle}>
+                            <Ionicons name="fitness" size={isWeb ? 30 : 40} color="#60A5FA" />
                         </View>
+                        <Text style={st.appName}>
+                            <Text style={{ color: '#FFFFFF' }}>Vital</Text>
+                            <Text style={{ color: '#60A5FA' }}>App</Text>
+                        </Text>
+                        <Text style={st.slogan}>Tu bienestar, cada día</Text>
+                    </View>
 
-                        {/* FORMULARIO */}
-                        <View style={styles.formContainer}>
-                            <Text style={styles.formTitle}>
-                                {isRegistering ? 'Crear Cuenta Nueva' : 'Inicia Sesión'}
-                            </Text>
+                    {/* Tarjeta */}
+                    <View style={st.card}>
+                        <Text style={st.cardTitle}>{isRegistering ? 'Crear cuenta' : 'Iniciar Sesión'}</Text>
+                        <Text style={st.cardSub}>{isRegistering ? 'Únete a VitalApp hoy' : 'Bienvenido de nuevo'}</Text>
 
-                            {/* Campos exclusivos del registro */}
-                            {isRegistering && (
-                                <>
-                                    {/* NOMBRE */}
-                                    <Text style={styles.label}>Nombre completo *</Text>
-                                    <View style={styles.inputContainer}>
-                                        <Ionicons name="person-outline" size={20} color="#64748B" style={styles.inputIcon} />
-                                        <TextInput
-                                            style={styles.input}
-                                            placeholder="Ej: Juan Pérez"
-                                            placeholderTextColor="#94A3B8"
-                                            value={nombre}
-                                            onChangeText={setNombre}
-                                        />
-                                    </View>
+                        {isRegistering && (
+                            <>
+                                <Lab text="Nombre completo *" />
+                                <Inp icon="person-outline" ph="Ej: Juan Pérez" val={nombre} set={setNombre} />
+                                <Lab text="Fecha de nacimiento *" />
+                                <Inp icon="calendar-outline" ph="AAAA-MM-DD" val={fechaNacimiento} set={setFechaNacimiento} />
+                                <Lab text="Peso (kg) *" />
+                                <Inp icon="barbell-outline" ph="Ej: 75.5" val={peso} set={setPeso} kb="numeric" />
+                                <Lab text="Altura (m)" />
+                                <Inp icon="resize-outline" ph="Ej: 1.70" val={altura} set={setAltura} kb="numeric" />
 
-                                    {/* FECHA DE NACIMIENTO */}
-                                    <Text style={styles.label}>Fecha de nacimiento *</Text>
-                                    <View style={styles.inputContainer}>
-                                        <Ionicons name="calendar-outline" size={20} color="#64748B" style={styles.inputIcon} />
-                                        <TextInput
-                                            style={styles.input}
-                                            placeholder="AAAA-MM-DD  (Ej: 1955-05-20)"
-                                            placeholderTextColor="#94A3B8"
-                                            value={fechaNacimiento}
-                                            onChangeText={setFechaNacimiento}
-                                        />
-                                    </View>
+                                <Lab text="Género" />
+                                <View style={st.pills}>
+                                    {(['M', 'F', 'Otro'] as const).map(op => (
+                                        <TouchableOpacity
+                                            key={op}
+                                            style={[st.pill, genero === op && st.pillOn]}
+                                            onPress={() => setGenero(op)}
+                                        >
+                                            <Text style={[st.pillTxt, genero === op && st.pillTxtOn]}>
+                                                {op === 'M' ? 'Masculino' : op === 'F' ? 'Femenino' : 'Otro'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
 
-                                    {/* PESO */}
-                                    <Text style={styles.label}>Peso (kg) *</Text>
-                                    <View style={styles.inputContainer}>
-                                        <Ionicons name="barbell-outline" size={20} color="#64748B" style={styles.inputIcon} />
-                                        <TextInput
-                                            style={styles.input}
-                                            placeholder="Ej: 75.5"
-                                            placeholderTextColor="#94A3B8"
-                                            keyboardType="numeric"
-                                            value={peso}
-                                            onChangeText={setPeso}
-                                        />
-                                    </View>
+                                <Lab text="Teléfono" />
+                                <Inp icon="call-outline" ph="Ej: 312 123 4567" val={telefono} set={setTelefono} kb="phone-pad" />
 
-                                    {/* ALTURA */}
-                                    <Text style={styles.label}>Altura (m)</Text>
-                                    <View style={styles.inputContainer}>
-                                        <Ionicons name="resize-outline" size={20} color="#64748B" style={styles.inputIcon} />
-                                        <TextInput
-                                            style={styles.input}
-                                            placeholder="Ej: 1.70"
-                                            placeholderTextColor="#94A3B8"
-                                            keyboardType="numeric"
-                                            value={altura}
-                                            onChangeText={setAltura}
-                                        />
-                                    </View>
+                                <Lab text="Nivel de actividad" />
+                                <View style={st.pills}>
+                                    {(['sedentario', 'ligero', 'moderado', 'activo'] as const).map(op => (
+                                        <TouchableOpacity
+                                            key={op}
+                                            style={[st.pill, nivelActividad === op && st.pillOn]}
+                                            onPress={() => setNivelActividad(op)}
+                                        >
+                                            <Text style={[st.pillTxt, nivelActividad === op && st.pillTxtOn]}>
+                                                {op.charAt(0).toUpperCase() + op.slice(1)}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
 
-                                    {/* GÉNERO — enum: M, F, Otro */}
-                                    <Text style={styles.label}>Género</Text>
-                                    <View style={styles.selectorRow}>
-                                        {(['M', 'F', 'Otro'] as const).map(op => (
-                                            <TouchableOpacity
-                                                key={op}
-                                                style={[styles.selectorBtn, genero === op && styles.selectorBtnActive]}
-                                                onPress={() => setGenero(op)}
-                                            >
-                                                <Text style={[styles.selectorTxt, genero === op && styles.selectorTxtActive]}>
-                                                    {op === 'M' ? 'Masculino' : op === 'F' ? 'Femenino' : 'Otro'}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
+                                <Lab text="Condiciones médicas" />
+                                <Inp icon="medkit-outline" ph="Ej: Diabetes…" val={condicionesMedicas} set={setCondicionesMedicas} multi />
+                                <Lab text="Restricciones físicas" />
+                                <Inp icon="warning-outline" ph="Ej: No levantar peso…" val={restricciones} set={setRestricciones} multi />
+                            </>
+                        )}
 
-                                    {/* TELÉFONO */}
-                                    <Text style={styles.label}>Teléfono</Text>
-                                    <View style={styles.inputContainer}>
-                                        <Ionicons name="call-outline" size={20} color="#64748B" style={styles.inputIcon} />
-                                        <TextInput
-                                            style={styles.input}
-                                            placeholder="Ej: 312 123 4567"
-                                            placeholderTextColor="#94A3B8"
-                                            keyboardType="phone-pad"
-                                            value={telefono}
-                                            onChangeText={setTelefono}
-                                        />
-                                    </View>
+                        <Lab text="Usuario (correo)" />
+                        <Inp icon="person-outline" ph="tu@correo.com" val={email} set={setEmail} ac="none" kb="email-address" />
 
-                                    {/* NIVEL DE ACTIVIDAD — enum: sedentario, ligero, moderado, activo */}
-                                    <Text style={styles.label}>Nivel de actividad</Text>
-                                    <View style={styles.selectorRow}>
-                                        {(['sedentario', 'ligero', 'moderado', 'activo'] as const).map(op => (
-                                            <TouchableOpacity
-                                                key={op}
-                                                style={[styles.selectorBtn, nivelActividad === op && styles.selectorBtnActive]}
-                                                onPress={() => setNivelActividad(op)}
-                                            >
-                                                <Text style={[styles.selectorTxt, nivelActividad === op && styles.selectorTxtActive]}>
-                                                    {op.charAt(0).toUpperCase() + op.slice(1)}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
+                        <Lab text="Contraseña" />
+                        <Inp
+                            icon="lock-closed-outline"
+                            ph="••••••••"
+                            val={password}
+                            set={setPassword}
+                            secure={!showPass}
+                            rIcon={showPass ? 'eye-off-outline' : 'eye-outline'}
+                            rPress={() => setShowPass(v => !v)}
+                        />
 
-                                    {/* CONDICIONES MÉDICAS */}
-                                    <Text style={styles.label}>Condiciones médicas</Text>
-                                    <View style={[styles.inputContainer, styles.inputMultiline]}>
-                                        <Ionicons name="medkit-outline" size={20} color="#64748B" style={[styles.inputIcon, { alignSelf: 'flex-start', marginTop: 18 }]} />
-                                        <TextInput
-                                            style={[styles.input, { height: 80, textAlignVertical: 'top', paddingTop: 14 }]}
-                                            placeholder="Ej: Diabetes, Hipertensión…"
-                                            placeholderTextColor="#94A3B8"
-                                            multiline
-                                            value={condicionesMedicas}
-                                            onChangeText={setCondicionesMedicas}
-                                        />
-                                    </View>
-
-                                    {/* RESTRICCIONES */}
-                                    <Text style={styles.label}>Restricciones físicas</Text>
-                                    <View style={[styles.inputContainer, styles.inputMultiline]}>
-                                        <Ionicons name="warning-outline" size={20} color="#64748B" style={[styles.inputIcon, { alignSelf: 'flex-start', marginTop: 18 }]} />
-                                        <TextInput
-                                            style={[styles.input, { height: 80, textAlignVertical: 'top', paddingTop: 14 }]}
-                                            placeholder="Ej: No puede levantar peso, rodilla operada…"
-                                            placeholderTextColor="#94A3B8"
-                                            multiline
-                                            value={restricciones}
-                                            onChangeText={setRestricciones}
-                                        />
-                                    </View>
-                                </>
-                            )}
-
-                            {/* Campos comunes */}
-                            <Text style={styles.label}>Correo electrónico</Text>
-                            <View style={styles.inputContainer}>
-                                <Ionicons name="mail-outline" size={20} color="#64748B" style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="tu@correo.com"
-                                    placeholderTextColor="#94A3B8"
-                                    value={email}
-                                    onChangeText={setEmail}
-                                    autoCapitalize="none"
-                                    keyboardType="email-address"
-                                />
-                            </View>
-
-                            <Text style={styles.label}>Contraseña</Text>
-                            <View style={styles.inputContainer}>
-                                <Ionicons name="lock-closed-outline" size={20} color="#64748B" style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="••••••••"
-                                    placeholderTextColor="#94A3B8"
-                                    secureTextEntry
-                                    value={password}
-                                    onChangeText={setPassword}
-                                />
-                            </View>
-
-                            {/* Botón principal */}
-                            <TouchableOpacity
-                                style={[styles.mainButton, cargando && styles.mainButtonDisabled]}
-                                onPress={isRegistering ? handleRegister : handleLogin}
-                                disabled={cargando}
-                                activeOpacity={0.8}
+                        {/* Botón */}
+                        <TouchableOpacity
+                            style={[st.btnWrap, cargando && { opacity: 0.6 }]}
+                            onPress={isRegistering ? handleRegister : handleLogin}
+                            disabled={cargando}
+                            activeOpacity={0.85}
+                        >
+                            <LinearGradient
+                                colors={['#1E5FE6', '#1340A0']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={st.btnGrad}
                             >
-                                {cargando ? (
-                                    <ActivityIndicator color="#FFFFFF" size="large" />
-                                ) : (
-                                    <Text style={styles.mainButtonText}>
+                                {cargando ?
+                                    <ActivityIndicator color="#fff" size="small" /> :
+                                    <Text style={st.btnTxt}>
                                         {isRegistering ? 'Crear mi cuenta' : 'Entrar'}
                                     </Text>
-                                )}
-                            </TouchableOpacity>
+                                }
+                            </LinearGradient>
+                        </TouchableOpacity>
 
-                            {/* Cambiar entre login / registro */}
-                            <TouchableOpacity
-                                style={styles.switchContainer}
-                                onPress={() => setIsRegistering(!isRegistering)}
-                                activeOpacity={0.6}
-                            >
-                                <Text style={styles.switchText}>
-                                    {isRegistering ? '¿Ya tienes cuenta?' : '¿Eres nuevo aquí?'}
-                                </Text>
-                                <Text style={styles.switchTextBold}>
-                                    {isRegistering ? ' Inicia sesión' : ' Regístrate gratis'}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    </ScrollView>
-                </KeyboardAvoidingView>
-            </LinearGradient>
-        </SafeAreaView>
+                        <TouchableOpacity
+                            style={st.switchRow}
+                            onPress={() => setIsRegistering(!isRegistering)}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={st.switchTxt}>
+                                {isRegistering ? '¿Ya tienes cuenta?  ' : '¿Eres nuevo aquí?  '}
+                            </Text>
+                            <Text style={st.switchBold}>
+                                {isRegistering ? 'Inicia sesión' : 'Registrarse'}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <View style={{ height: 32 }} />
+                </ScrollView>
+            </KeyboardAvoidingView>
+        </Background>
     );
 }
 
-const styles = StyleSheet.create({
-    safeArea: {
+// ── Estilos ───────────────────────────────────────────────────────────────────
+const CARD_BG = 'rgba(10,18,52,0.72)';
+const CARD_BDR = 'rgba(50,90,200,0.25)';
+const INPUT_BG = 'rgba(20,35,80,0.60)';
+const INPUT_BDR = 'rgba(60,100,220,0.22)';
+const CARD_MAX = 440;
+
+const st = StyleSheet.create({
+    root: {
         flex: 1,
-        backgroundColor: '#1E3A8A',
-        ...(isWeb ? { height: '100vh' as any, overflow: 'hidden' as any } : {}),
+        backgroundColor: '#03071E',
+        overflow: 'hidden' as any,
+        ...(isWeb ? { height: '100vh' as any } : {}),
     },
-    gradientBackground: {
+    centerFull: {
         flex: 1,
-    },
-    container: {
-        flex: 1,
-    },
-    scrollContent: {
-        flexGrow: 1,
-        justifyContent: isWeb ? 'center' : ('flex-start' as any),
-        alignItems: isWeb ? 'center' : ('stretch' as any),
-        paddingHorizontal: isWeb ? 24 : 24,
-        paddingTop: isWeb ? 16 : 60,
-        paddingBottom: isWeb ? 16 : 40,
-    },
-    header: {
-        alignItems: 'center',
-        marginBottom: isWeb ? 16 : 40,
-    },
-    logoCircle: {
-        width: isWeb ? 64 : 100,
-        height: isWeb ? 64 : 100,
-        borderRadius: isWeb ? 32 : 50,
-        backgroundColor: '#FFFFFF',
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: isWeb ? 8 : 20,
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 8 },
-                shadowOpacity: 0.2,
-                shadowRadius: 16,
-            },
-            android: { elevation: 10 },
-            web: { boxShadow: '0 8px 16px rgba(0,0,0,0.2)' }
-        }),
+        paddingHorizontal: 20
     },
-    titulo: {
-        fontSize: isWeb ? 30 : 42,
-        fontWeight: '900',
-        color: '#FFFFFF',
-        marginBottom: isWeb ? 2 : 8,
-        letterSpacing: 1,
+    scroll: {
+        flexGrow: 1,
+        alignItems: isWeb ? 'center' : 'stretch',
+        paddingHorizontal: isWeb ? 24 : 20,
+        paddingTop: isWeb ? 24 : 52,
+        paddingBottom: 24,
+        justifyContent: isWeb ? 'center' : 'flex-start',
     },
-    subtitulo: {
-        fontSize: isWeb ? 14 : 18,
-        color: '#DBEAFE',
-        fontWeight: '500',
-    },
-    formContainer: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: isWeb ? 20 : 32,
-        padding: isWeb ? 20 : 30,
+    logoZone: {
+        alignItems: 'center',
+        marginBottom: 22,
         width: '100%',
-        ...(isWeb ? { maxWidth: 420 } : {}),
+        ...(isWeb ? { maxWidth: CARD_MAX } : {})
+    },
+    logoCircle: {
+        width: isWeb ? 64 : 80,
+        height: isWeb ? 64 : 80,
+        borderRadius: isWeb ? 32 : 40,
+        backgroundColor: 'rgba(30,60,160,0.35)',
+        borderWidth: 1.5,
+        borderColor: 'rgba(60,130,255,0.30)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 12,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#3B82F6',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.65,
+                shadowRadius: 20
+            },
+            android: { elevation: 12 },
+            web: { boxShadow: '0 0 30px rgba(59,130,246,0.50)' },
+        }),
+    },
+    appName: {
+        fontSize: isWeb ? 36 : 46,
+        fontWeight: '900',
+        letterSpacing: 1.5,
+        marginBottom: 4
+    },
+    slogan: {
+        fontSize: isWeb ? 16 : 18,
+        color: 'rgba(255,255,255,0.50)',
+        fontWeight: '400'
+    },
+    card: {
+        backgroundColor: CARD_BG,
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: CARD_BDR,
+        padding: isWeb ? 28 : 22,
+        width: '100%',
+        ...(isWeb ? { maxWidth: CARD_MAX } : {}),
         ...Platform.select({
             ios: {
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: 10 },
-                shadowOpacity: 0.1,
-                shadowRadius: 20,
+                shadowOffset: { width: 0, height: 16 },
+                shadowOpacity: 0.45,
+                shadowRadius: 28
             },
-            android: { elevation: 8 },
-            web: { boxShadow: '0 10px 20px rgba(0,0,0,0.1)' }
+            android: { elevation: 16 },
+            web: {
+                backdropFilter: 'blur(24px)',
+                WebkitBackdropFilter: 'blur(24px)',
+                boxShadow: '0 12px 48px rgba(0,0,0,0.55)'
+            },
         }),
     },
-    formTitle: {
-        fontSize: isWeb ? 18 : 24,
-        fontWeight: '900',
-        color: '#1E293B',
-        marginBottom: isWeb ? 14 : 24,
-        textAlign: 'center',
+    cardTitle: {
+        fontSize: isWeb ? 26 : 28,
+        fontWeight: '800',
+        color: '#FFFFFF',
+        marginBottom: 4
+    },
+    cardSub: {
+        fontSize: isWeb ? 15 : 16,
+        color: 'rgba(180,200,255,0.55)',
+        marginBottom: 20
     },
     label: {
-        fontSize: isWeb ? 13 : 16,
-        fontWeight: '700',
-        color: '#475569',
-        marginBottom: isWeb ? 4 : 8,
-        marginLeft: 4,
+        fontSize: isWeb ? 14 : 15,
+        fontWeight: '600',
+        color: 'rgba(160,190,255,0.65)',
+        marginBottom: 7,
+        marginLeft: 2
     },
-    inputContainer: {
+    inputWrap: {
         flexDirection: 'row',
         alignItems: 'center',
-        borderWidth: 1.5,
-        borderColor: '#E2E8F0',
-        borderRadius: isWeb ? 10 : 16,
-        backgroundColor: '#F8FAFC',
-        marginBottom: isWeb ? 10 : 20,
-        paddingHorizontal: isWeb ? 10 : 16,
-        height: isWeb ? 40 : 60,
+        backgroundColor: INPUT_BG,
+        borderWidth: 1,
+        borderColor: INPUT_BDR,
+        borderRadius: 14,
+        paddingHorizontal: 14,
+        height: isWeb ? 46 : 54,
+        marginBottom: 14,
     },
-    inputIcon: {
-        marginRight: isWeb ? 8 : 12,
+    inputMulti: {
+        height: 'auto' as any,
+        minHeight: 54,
+        alignItems: 'flex-start',
+        paddingVertical: 8
     },
     input: {
         flex: 1,
-        fontSize: isWeb ? 14 : 18,
-        color: '#1E293B',
-        fontWeight: '500',
-        height: '100%',
-        ...(isWeb ? { outlineStyle: 'none' as any } : {}),
-    },
-    mainButton: {
-        backgroundColor: '#2563EB',
-        borderRadius: isWeb ? 10 : 16,
-        height: isWeb ? 42 : 64,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: isWeb ? 6 : 12,
-        marginBottom: isWeb ? 12 : 24,
-        ...Platform.select({
-            ios: {
-                shadowColor: '#2563EB',
-                shadowOffset: { width: 0, height: 8 },
-                shadowOpacity: 0.3,
-                shadowRadius: 12,
-            },
-            android: { elevation: 6 },
-            web: { boxShadow: '0 8px 12px rgba(37,99,235,0.3)', cursor: 'pointer' }
-        }),
-    },
-    mainButtonDisabled: {
-        backgroundColor: '#94A3B8',
-        shadowOpacity: 0,
-        elevation: 0,
-    },
-    mainButtonText: {
-        fontSize: isWeb ? 16 : 20,
-        fontWeight: '800',
+        fontSize: isWeb ? 16 : 18,
         color: '#FFFFFF',
-    },
-    switchContainer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingVertical: isWeb ? 4 : 12,
-    },
-    switchText: {
-        fontSize: isWeb ? 13 : 16,
-        color: '#64748B',
         fontWeight: '500',
+        height: '100%'
     },
-    switchTextBold: {
-        fontSize: isWeb ? 13 : 16,
-        color: '#2563EB',
-        fontWeight: '800',
-        ...(isWeb ? { cursor: 'pointer' as any } : {}),
-    },
-    selectorRow: {
+    pills: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: isWeb ? 6 : 8,
-        marginBottom: isWeb ? 10 : 20,
+        gap: 8,
+        marginBottom: 14
     },
-    selectorBtn: {
+    pill: {
         flex: 1,
-        minWidth: isWeb ? 60 : 70,
-        paddingVertical: isWeb ? 8 : 12,
-        paddingHorizontal: isWeb ? 6 : 8,
-        borderRadius: isWeb ? 8 : 12,
-        borderWidth: 1.5,
-        borderColor: '#E2E8F0',
-        backgroundColor: '#F8FAFC',
+        minWidth: 64,
+        paddingVertical: 9,
+        paddingHorizontal: 6,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: INPUT_BDR,
+        backgroundColor: INPUT_BG,
         alignItems: 'center',
         ...(isWeb ? { cursor: 'pointer' as any } : {}),
     },
-    selectorBtnActive: {
-        borderColor: '#2563EB',
-        backgroundColor: '#EFF6FF',
+    pillOn: {
+        borderColor: '#3B82F6',
+        backgroundColor: 'rgba(59,130,246,0.25)'
     },
-    selectorTxt: {
-        fontSize: isWeb ? 12 : 14,
+    pillTxt: {
+        fontSize: isWeb ? 13 : 14,
         fontWeight: '600',
-        color: '#64748B',
+        color: 'rgba(160,190,255,0.50)'
     },
-    selectorTxtActive: {
-        color: '#2563EB',
+    pillTxtOn: {
+        color: '#93C5FD'
     },
-    inputMultiline: {
-        height: 'auto',
-        minHeight: isWeb ? 40 : 60,
-        alignItems: 'flex-start',
-        paddingVertical: 0,
-    },
-    errorContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 24,
-    },
-    errorCard: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: isWeb ? 20 : 32,
-        padding: isWeb ? 36 : 44,
-        width: '100%',
-        ...(isWeb ? { maxWidth: 420 } : {}),
-        alignItems: 'center',
+    btnWrap: {
+        borderRadius: 14,
+        overflow: 'hidden',
+        marginTop: 6,
+        marginBottom: 16,
         ...Platform.select({
             ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 10 },
-                shadowOpacity: 0.1,
-                shadowRadius: 20,
+                shadowColor: '#1E5FE6',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.55,
+                shadowRadius: 16
             },
             android: { elevation: 8 },
-            web: { boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }
-        }),
-    },
-    errorIconCircle: {
-        width: isWeb ? 88 : 110,
-        height: isWeb ? 88 : 110,
-        borderRadius: isWeb ? 44 : 55,
-        backgroundColor: '#FEF2F2',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: isWeb ? 18 : 24,
-    },
-    errorTitle: {
-        fontSize: isWeb ? 22 : 28,
-        fontWeight: '900',
-        color: '#1E293B',
-        marginBottom: isWeb ? 8 : 12,
-        textAlign: 'center',
-    },
-    errorMessage: {
-        fontSize: isWeb ? 15 : 18,
-        fontWeight: '500',
-        color: '#64748B',
-        textAlign: 'center',
-        marginBottom: isWeb ? 24 : 32,
-        lineHeight: isWeb ? 22 : 26,
-    },
-    errorButton: {
-        flexDirection: 'row',
-        backgroundColor: '#2563EB',
-        borderRadius: isWeb ? 10 : 16,
-        height: isWeb ? 44 : 56,
-        paddingHorizontal: isWeb ? 28 : 36,
-        justifyContent: 'center',
-        alignItems: 'center',
-        ...Platform.select({
-            ios: {
-                shadowColor: '#2563EB',
-                shadowOffset: { width: 0, height: 6 },
-                shadowOpacity: 0.3,
-                shadowRadius: 10,
+            web: {
+                boxShadow: '0 8px 28px rgba(30,95,230,0.50)',
+                cursor: 'pointer' as any
             },
-            android: { elevation: 6 },
-            web: { boxShadow: '0 6px 12px rgba(37,99,235,0.3)', cursor: 'pointer' }
         }),
     },
-    errorButtonText: {
-        fontSize: isWeb ? 15 : 18,
+    btnGrad: {
+        height: isWeb ? 48 : 58,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center'
+    },
+    btnTxt: {
+        fontSize: isWeb ? 18 : 20,
         fontWeight: '800',
         color: '#FFFFFF',
+        letterSpacing: 0.5
+    },
+    switchRow: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 2
+    },
+    switchTxt: {
+        fontSize: isWeb ? 15 : 16,
+        color: 'rgba(160,190,255,0.50)',
+        fontWeight: '500'
+    },
+    switchBold: {
+        fontSize: isWeb ? 15 : 16,
+        color: '#60A5FA',
+        fontWeight: '800',
+        ...(isWeb ? { cursor: 'pointer' as any } : {})
     },
 });
-

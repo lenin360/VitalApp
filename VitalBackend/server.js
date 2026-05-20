@@ -50,7 +50,7 @@ app.post('/api/login', async (req, res) => {
         const [rows] = await pool.query(
             `SELECT id_usuario, nombre, email, edad, rol, nivel_actividad,
                     condiciones_medicas, restricciones, password_hash
-             FROM usuarios
+             FROM usuario
              WHERE email = ? AND cuenta_activa = 1`,
             [email]
         );
@@ -99,7 +99,7 @@ app.post('/api/register', async (req, res) => {
     try {
         // Verificar si el email ya existe
         const [existing] = await pool.query(
-            'SELECT id_usuario FROM usuarios WHERE email = ?',
+            'SELECT id_usuario FROM usuario WHERE email = ?',
             [email]
         );
 
@@ -112,7 +112,7 @@ app.post('/api/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password_hash, salt);
 
         const [result] = await pool.query(
-            `INSERT INTO usuarios
+            `INSERT INTO usuario
                 (nombre, email, password_hash, fecha_nacimiento, peso, altura, genero, telefono)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [nombre, email, hashedPassword, fecha_nacimiento, peso, altura ?? null, genero ?? null, telefono ?? null]
@@ -137,7 +137,7 @@ app.get('/api/user/:id', async (req, res) => {
             `SELECT id_usuario, nombre, email, edad, peso, altura, genero,
                     telefono, fecha_registro, nivel_actividad,
                     condiciones_medicas, restricciones, rol
-             FROM usuarios
+             FROM usuario
              WHERE id_usuario = ? AND cuenta_activa = 1`,
             [id]
         );
@@ -163,7 +163,7 @@ app.put('/api/user/:id', async (req, res) => {
 
     try {
         const [result] = await pool.query(
-            `UPDATE usuarios
+            `UPDATE usuario
              SET nombre = ?, email = ?, peso = ?, altura = ?, genero = ?,
                  telefono = ?, nivel_actividad = ?, condiciones_medicas = ?, restricciones = ?
              WHERE id_usuario = ?`,
@@ -212,7 +212,7 @@ app.get('/api/exercises/user/:id', async (req, res) => {
     const { id } = req.params;
     try {
         const [users] = await pool.query(
-            'SELECT edad, peso FROM usuarios WHERE id_usuario = ? AND cuenta_activa = 1',
+            'SELECT edad, peso FROM usuario WHERE id_usuario = ? AND cuenta_activa = 1',
             [id]
         );
 
@@ -569,7 +569,7 @@ app.get('/api/admin/usuarios', async (req, res) => {
             `SELECT id_usuario, nombre, fecha_nacimiento, edad, peso, altura,
                     genero, email, rol, cuenta_activa, telefono, fecha_registro,
                     nivel_actividad, condiciones_medicas, restricciones
-             FROM usuarios
+             FROM usuario
              ORDER BY id_usuario ASC`
         );
         res.json({ success: true, usuarios: rows });
@@ -586,7 +586,7 @@ app.put('/api/admin/usuarios/:id', async (req, res) => {
             cuenta_activa, nivel_actividad, condiciones_medicas, restricciones } = req.body;
     try {
         const [result] = await pool.query(
-            `UPDATE usuarios SET
+            `UPDATE usuario SET
                 nombre = ?, email = ?, peso = ?, altura = ?, genero = ?,
                 telefono = ?, rol = ?, cuenta_activa = ?,
                 nivel_actividad = ?, condiciones_medicas = ?, restricciones = ?
@@ -612,7 +612,7 @@ app.delete('/api/admin/usuarios/:id', async (req, res) => {
     const { id } = req.params;
     console.log('🗑️  DELETE usuario ID:', id);
     try {
-        const [result] = await pool.query('DELETE FROM usuarios WHERE id_usuario = ?', [id]);
+        const [result] = await pool.query('DELETE FROM usuario WHERE id_usuario = ?', [id]);
         console.log('Filas afectadas:', result.affectedRows);
         if (result.affectedRows > 0) {
             res.json({ success: true, message: 'Usuario eliminado correctamente' });
@@ -843,7 +843,7 @@ app.get('/api/admin/usuarios', async (req, res) => {
             `SELECT id_usuario, nombre, email, edad, peso, altura, genero,
                     telefono, rol, cuenta_activa, fecha_registro,
                     nivel_actividad, condiciones_medicas, restricciones
-             FROM usuarios ORDER BY id_usuario ASC`
+             FROM usuario ORDER BY id_usuario ASC`
         );
         res.json({ success: true, usuarios: rows });
     } catch (error) {
@@ -860,7 +860,7 @@ app.put('/api/admin/usuarios/:id', async (req, res) => {
             condiciones_medicas, restricciones } = req.body;
     try {
         const [result] = await pool.query(
-            `UPDATE usuarios SET
+            `UPDATE usuario SET
                 nombre = ?, email = ?, peso = ?, altura = ?, genero = ?,
                 telefono = ?, rol = ?, cuenta_activa = ?, nivel_actividad = ?,
                 condiciones_medicas = ?, restricciones = ?

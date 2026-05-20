@@ -14,96 +14,66 @@ export interface Routine {
 
 export const VIDEO_LIBRARY: Record<string, string[]> = {
   respiracion: [
-    '7X6V_LwG1kY', // Breathing Exercises - Verified
-    '8BcPHWG6X64', // 10 Min Chair - Verified
-    'vBXWOUXb_5g', // Relajación
-    'F28MGLlpP90', // Relajación guiada
+    'v_5jP2PRTV4', // Ejercicios respiración adultos mayores
+    'POGexZe7Bxw', // Respiración y relajación guiada
+    'wEIK-2LaRwY', // Técnicas de respiración
   ],
   hombros: [
-    'D3Wly_9yOic', // Zumba Gold 7 min (Hombros/Brazos)
-    'W2yTzYtS5m0', // Alivio dolor
-    '7B86uG1S_0E', // Ejercicios hombro
+    'ZvfDryEt5bw', // Stretching seniors (hombros incluidos)
+    'KcdkySvCRCc', // Estiramientos superiores
+    'YaM1_I8omDw', // Chair exercises arms/shoulders
   ],
   estiramiento: [
-    'sT6N3_0mK8A', // Tai Chi / Estiramiento - Verified
-    'j6wR51X3YCo', // Estiramientos en silla
-    'msPWv7YCcMQ', // Silla con estiramientos
+    'ZvfDryEt5bw', // Stretching exercises seniors
+    'KcdkySvCRCc', // Full body stretching seniors
+    'o50BQDwaDcI', // Chair yoga stretching
   ],
   caminata: [
-    'cEitXw_2h-0', // Senior Exercise - Verified
-    'XyGvG60TcL8', // Caminar en casa
-    'bmI2EQZ7bTI', // Marcha en el lugar
+    'Z26PWsBsSFY', // Walking exercise seniors at home
+    'y8IaBla_tQ4', // Indoor walking workout
+    'uJZk7jafw-o', // Balance & walking exercises
   ],
   equilibrio: [
-    'SEDvS8E06A4', // Balance Exercises - Verified
-    'Cx1xXGGNFlg', // Equilibrio
-    'QPjBD7gCYHU', // Sentadillas
+    'uJZk7jafw-o', // Senior balance exercises
+    'MJLHMUa7WYs', // Balance training seniors
+    'b2gF0nTAY0o', // Chair yoga balance
   ],
   yoga: [
-    '8r52D59JmEw', // Chair Yoga - Verified
-    'iN25Z0j8w7E', // Yoga adultos mayores
+    '1DYH5ud3zHo', // Chair yoga seniors
+    'G8BsLlPE1m4', // Gentle chair yoga
+    'b2gF0nTAY0o', // Yoga for seniors
   ],
   zumba: [
-    'D3Wly_9yOic', // Zumba Gold 1 - Verified
-    'lA_fOni6F4U', // Zumba Gold 2 - Verified
-    'X0XJ3E9iC80', // Zumba Gold 3 - Verified
-    '3F-hBw2L77I', // Zumba Gold 4 - Verified
-    't2p6AisqRIs', // Zumba Party - Verified
+    '0KJaefStf5s', // Zumba Gold seniors
+    '8o9JJ17JrTw', // Zumba Gold low impact
+    'Yge5lZJC41Q', // Zumba Gold dance workout
   ],
   pilates: [
-    '8r52D59JmEw', // Chair Pilates/Yoga - Verified
-    'msPWv7YCcMQ', // Pilates suave
+    'jsFzFiyDqBs', // Pilates seniors chair
+    'AxlIrQpzmqM', // Chair Pilates gentle
   ],
   core: [
-    'M_XG_Z_J_78', // Rutina completa
-    'msPWv7YCcMQ', // Core en silla
-    'iqddEZo6Uf4', // Better than Walking (Cardio + Abs)
-    'X0x5u6u-7cI', // Ejercicios fáciles y seguros
-    'yjJjUJlBF_0', // Fortalecimiento abdominal
-    'SG_IuD0g2yo', // Estabilidad central
-    '14xKzYj83cE', // Abdominales sentados
-    '7VvW6N8N-vM', // Control de tronco
-    'A6E1E4v67tQ', // Core y espalda sana
+    '6Ts-deSDnRM', // Core exercises seniors seated
+    'n3z6GVr6WL4', // Seated core workout
+    'jsFzFiyDqBs', // Pilates core seniors
   ],
   brazos: [
-    'HGMLmYFYv7I', // Ganar músculo - Mariana Quevedo
-    'eK1YgC5Sw-k', // Fuerza y Músculo (Mariana Quevedo)
-    'p6yS09_o_1w', // Fortalecimiento piernas y brazos
-    '5GCkAWIe6uU', // Brazos con pesas
-    'DsriajXRFJ4', // Fuerza de brazos
-    'K_V-UjO2PTE', // Brazos sin dolor
-    '7B86uG1S_0E', // Brazos y hombros fuerza
-    'iGfHl_uL1-I', // Bíceps y Tríceps suave
-    '6T7Wn6v0nBw', // Empuje y tracción
-    'mC_Wdu6d-rM', // Mariana Quevedo - Ejercicios fuerza
-    'W2yTzYtS5m0', // Hombros y brazos
-    'j6wR51X3YCo', // Movilidad brazos
+    'YaM1_I8omDw', // Chair exercises seniors arms
+    'z-_lgQe9NJs', // Arm exercises seated seniors
+    'ZvfDryEt5bw', // Upper body stretching
   ],
   silla: [
-    'msPWv7YCcMQ', // 6 ejercicios en silla
-    'j6wR51X3YCo', // Silla fácil y seguro
-    'M_XG_Z_J_78', // Rutina 15 min en silla
-    'X0x5u6u-7cI', // Fácil y seguro en silla
-    'bmI2EQZ7bTI', // Ejercicios sentados
-    'R8b1vK49oX8', // Circuito activo
-    'N2s45hK1m3A', // Ejercicios medios silla
-    'VpW_e-5L-v0', // Movilidad total silla
-    'S6oZ38_F5vI', // Baile sentado
-    'N8uH9V6qF-U', // Cardio silla
-    'otru9zXCeGM', // Mariana Quevedo - Cardio Baile en Silla
+    '1DYH5ud3zHo', // Chair yoga seniors
+    'G8BsLlPE1m4', // Gentle chair exercises
+    'o50BQDwaDcI', // 20 min chair yoga walk better
+    'jsFzFiyDqBs', // Chair Pilates
+    'YaM1_I8omDw', // Chair arm exercises
   ],
   piernas: [
-    'p6yS09_o_1w', // Fortalecimiento de piernas
-    'QPjBD7gCYHU', // Sentadillas
-    'mC_Wdu6d-rM', // Equilibrio y piernas
-    'XyGvG60TcL8', // Caminata y piernas
-    'GfQbq8_cwls', // Mariana Quevedo - Muscle in Legs
-    '_HCnd3AGM3I', // Ejercicios piernas adulto mayor
-    'Cj2hY-fQkE4', // Fuerza glúteos piernas
-    'Z3w1w1fR2c8', // Mejora marcha
-    '7VvW6N8N-vM', // Sentadillas seguras silla
-    'A6E1E4v67tQ', // Rodillas fuertes
-    'G46R1b6V7eM', // Piernas fuertes 2 - Verified Mariana Quevedo
+    '60fBjmYOGgw', // Senior leg exercises
+    '8BcPHWGQO44', // Leg strength seniors
+    'Z26PWsBsSFY', // Walking & legs workout
+    'MJLHMUa7WYs', // Balance & leg training
   ],
 };
 
