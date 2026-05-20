@@ -400,6 +400,13 @@ export default function EjerciciosScreen() {
                                             </Text>
                                         </View>
                                     </View>
+                                    
+                                    {getExerciseAdvice(ejercicio) ? (
+                                        <View style={[styles.warningBanner, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}> 
+                                            <Ionicons name="warning-outline" size={16} color="#B91C1C" />
+                                            <Text style={styles.warningText}>{getExerciseAdvice(ejercicio)}</Text>
+                                        </View>
+                                    ) : null}
 
                                     {getExerciseAdvice(ejercicio) ? (
                                         <View style={[styles.warningBanner, { backgroundColor: '#FEE2E2', borderColor: '#FECACA', marginTop: 12, marginHorizontal: 0 }]}> 
