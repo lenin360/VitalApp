@@ -2,6 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const bcrypt = require('bcryptjs');
+const helmet = require('helmet');
+const speakeasy = require('speakeasy');
+const QRCode = require('qrcode');
 const { pool, testConnection } = require('./db');
 
 dotenv.config();
@@ -10,6 +13,18 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", "data:", "https:"],
+            connectSrc: ["'self'", "http:", "https:"],
+        },
+    },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+}));
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -23,15 +38,28 @@ app.use(express.urlencoded({ extended: true }));
 // Probar conexión
 testConnection();
 
+// Inicializar DB (Añadir columnas MFA si no existen)
+async function initDB() {
+    try {
+        await pool.query('ALTER TABLE usuario ADD COLUMN mfa_secret VARCHAR(255) DEFAULT NULL');
+        console.log(' Columna mfa_secret añadida a usuario');
+    } catch (e) { /* Ya existe */ }
+    try {
+        await pool.query('ALTER TABLE usuario ADD COLUMN mfa_enabled BOOLEAN DEFAULT FALSE');
+        console.log(' Columna mfa_enabled añadida a usuario');
+    } catch (e) { /* Ya existe */ }
+}
+initDB();
+
 // ============================================
 // HEALTH CHECK
 // ============================================
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    message: 'Vital App Backend funcionando correctamente',
-    status: 'active',
-    timestamp: new Date().toISOString()
-  });
+    res.json({
+        message: 'Vital App Backend funcionando correctamente',
+        status: 'active',
+        timestamp: new Date().toISOString()
+    });
 });
 
 // ============================================
@@ -39,7 +67,7 @@ app.get('/api/health', (req, res) => {
 // ============================================
 app.post('/api/login', async (req, res) => {
     const { email, password_hash } = req.body;
-    console.log('📝 Login - Email:', email);
+    console.log(' Login - Email:', email);
 
     if (!email || !password_hash) {
         return res.status(400).json({ success: false, message: 'Email y contraseña son obligatorios' });
@@ -49,7 +77,7 @@ app.post('/api/login', async (req, res) => {
         // Buscar usuario solo por email (la contraseña se verifica con bcrypt, no en SQL)
         const [rows] = await pool.query(
             `SELECT id_usuario, nombre, email, edad, rol, nivel_actividad,
-                    condiciones_medicas, restricciones, password_hash
+                    condiciones_medicas, restricciones, password_hash, mfa_enabled
              FROM usuario
              WHERE email = ? AND cuenta_activa = 1`,
             [email]
@@ -62,7 +90,7 @@ app.post('/api/login', async (req, res) => {
         const usuario = rows[0];
 
         // Comparar la contraseña ingresada contra el hash guardado en la BD
-        // Compatible tanto con hashes $2y$ (PHP) como $2b$ (Node.js)
+
         const hashCompatible = usuario.password_hash.replace(/^\$2y\$/, '$2b$');
         const passwordValida = await bcrypt.compare(password_hash, hashCompatible);
 
@@ -72,11 +100,121 @@ app.post('/api/login', async (req, res) => {
 
         // No devolver el hash al cliente
         const { password_hash: _, ...usuarioSinHash } = usuario;
-        console.log('[INFO] Login exitoso para:', email);
+
+        if (usuario.mfa_enabled) {
+            console.log(' Login requiere MFA para:', email);
+            return res.json({ success: true, requiresMfa: true, userId: usuario.id_usuario });
+        }
+
+        console.log(' Login exitoso para:', email);
         res.json({ success: true, user: usuarioSinHash });
 
     } catch (error) {
-        console.error('[ERROR] Error en login:', error);
+        console.error(' Error en login:', error);
+        res.status(500).json({ success: false, message: 'Error del servidor' });
+    }
+});
+
+// ============================================
+// MFA (MULTI-FACTOR AUTHENTICATION)
+// ============================================
+
+app.post('/api/mfa/setup', async (req, res) => {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ success: false, message: 'Falta userId' });
+
+    try {
+        const secret = speakeasy.generateSecret({ name: `VitalApp (${userId})` });
+
+        await pool.query('UPDATE usuario SET mfa_secret = ? WHERE id_usuario = ?', [secret.base32, userId]);
+
+        QRCode.toDataURL(secret.otpauth_url, (err, data_url) => {
+            if (err) return res.status(500).json({ success: false, message: 'Error al generar QR' });
+            res.json({ success: true, secret: secret.base32, qrCode: data_url });
+        });
+    } catch (e) {
+        console.error(' Error en MFA Setup:', e);
+        res.status(500).json({ success: false, message: 'Error del servidor' });
+    }
+});
+
+app.post('/api/mfa/enable', async (req, res) => {
+    const { userId, token } = req.body;
+    if (!userId || !token) return res.status(400).json({ success: false, message: 'Faltan datos' });
+
+    try {
+        const [rows] = await pool.query('SELECT mfa_secret FROM usuario WHERE id_usuario = ?', [userId]);
+        if (rows.length === 0 || !rows[0].mfa_secret) {
+            return res.json({ success: false, message: 'MFA no configurado' });
+        }
+
+        const verified = speakeasy.totp.verify({
+            secret: rows[0].mfa_secret,
+            encoding: 'base32',
+            token: token
+        });
+
+        if (verified) {
+            await pool.query('UPDATE usuario SET mfa_enabled = 1 WHERE id_usuario = ?', [userId]);
+            res.json({ success: true, message: 'MFA habilitado correctamente' });
+        } else {
+            res.json({ success: false, message: 'Token incorrecto' });
+        }
+    } catch (e) {
+        res.status(500).json({ success: false, message: 'Error del servidor' });
+    }
+});
+
+app.post('/api/mfa/verify-login', async (req, res) => {
+    const { userId, token } = req.body;
+
+    try {
+        const [rows] = await pool.query(
+            `SELECT id_usuario, nombre, email, edad, rol, nivel_actividad,
+                    condiciones_medicas, restricciones, mfa_secret, mfa_enabled
+             FROM usuario
+             WHERE id_usuario = ? AND cuenta_activa = 1`,
+            [userId]
+        );
+
+        if (rows.length === 0) return res.json({ success: false, message: 'Usuario no encontrado' });
+
+        const usuario = rows[0];
+
+        if (!usuario.mfa_enabled) {
+            return res.json({ success: false, message: 'MFA no está habilitado para este usuario' });
+        }
+
+        const verified = speakeasy.totp.verify({
+            secret: usuario.mfa_secret,
+            encoding: 'base32',
+            token: token,
+            window: 1 // Permitir ligero desfase de tiempo
+        });
+
+        if (verified) {
+            const { mfa_secret, ...usuarioLimpio } = usuario;
+            console.log(' MFA Login exitoso para ID:', userId);
+            res.json({ success: true, user: usuarioLimpio });
+        } else {
+            res.json({ success: false, message: 'Código incorrecto' });
+        }
+    } catch (e) {
+        console.error(' Error en MFA Verify Login:', e);
+        res.status(500).json({ success: false, message: 'Error del servidor' });
+    }
+});
+
+app.post('/api/mfa/disable', async (req, res) => {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ success: false, message: 'Faltan datos' });
+
+    try {
+        await pool.query('UPDATE usuario SET mfa_enabled = 0, mfa_secret = NULL WHERE id_usuario = ?', [userId]);
+        console.log(' MFA Deshabilitado para ID:', userId);
+        res.json({ success: true, message: 'MFA deshabilitado correctamente' });
+    } catch (e) {
+        console.error(' Error al deshabilitar MFA:', e);
         res.status(500).json({ success: false, message: 'Error del servidor' });
     }
 });
@@ -87,7 +225,7 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/register', async (req, res) => {
     // 'edad' no se inserta: es columna VIRTUAL generada desde fecha_nacimiento
     const { nombre, email, password_hash, fecha_nacimiento, peso, altura, genero, telefono } = req.body;
-    console.log('📝 Registro:', { nombre, email, fecha_nacimiento });
+    console.log(' Registro:', { nombre, email, fecha_nacimiento });
 
     if (!nombre || !email || !password_hash || !fecha_nacimiento || !peso) {
         return res.status(400).json({
@@ -118,11 +256,11 @@ app.post('/api/register', async (req, res) => {
             [nombre, email, hashedPassword, fecha_nacimiento, peso, altura ?? null, genero ?? null, telefono ?? null]
         );
 
-        console.log('[INFO] Usuario registrado ID:', result.insertId);
+        console.log(' Usuario registrado ID:', result.insertId);
         res.json({ success: true, id: result.insertId, message: 'Registro exitoso' });
 
     } catch (error) {
-        console.error('[ERROR] Error en registro:', error);
+        console.error(' Error en registro:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -136,7 +274,7 @@ app.get('/api/user/:id', async (req, res) => {
         const [rows] = await pool.query(
             `SELECT id_usuario, nombre, email, edad, peso, altura, genero,
                     telefono, fecha_registro, nivel_actividad,
-                    condiciones_medicas, restricciones, rol
+                    condiciones_medicas, restricciones, rol, mfa_enabled
              FROM usuario
              WHERE id_usuario = ? AND cuenta_activa = 1`,
             [id]
@@ -147,7 +285,7 @@ app.get('/api/user/:id', async (req, res) => {
             res.json({ success: false, message: 'Usuario no encontrado' });
         }
     } catch (error) {
-        console.error('[ERROR] Error al obtener perfil:', error);
+        console.error(' Error al obtener perfil:', error);
         res.status(500).json({ success: false, message: 'Error del servidor' });
     }
 });
@@ -159,7 +297,7 @@ app.put('/api/user/:id', async (req, res) => {
     const { id } = req.params;
     // 'edad' es columna VIRTUAL (no editable). Se actualiza fecha_nacimiento si se desea cambiar la edad.
     const { nombre, email, peso, altura, genero, telefono, nivel_actividad, condiciones_medicas, restricciones } = req.body;
-    console.log('📝 Actualizar perfil ID:', id);
+    console.log(' Actualizar perfil ID:', id);
 
     try {
         const [result] = await pool.query(
@@ -168,18 +306,18 @@ app.put('/api/user/:id', async (req, res) => {
                  telefono = ?, nivel_actividad = ?, condiciones_medicas = ?, restricciones = ?
              WHERE id_usuario = ?`,
             [nombre, email, peso, altura ?? null, genero ?? null,
-             telefono ?? null, nivel_actividad ?? 'sedentario',
-             condiciones_medicas ?? null, restricciones ?? null, id]
+                telefono ?? null, nivel_actividad ?? 'sedentario',
+                condiciones_medicas ?? null, restricciones ?? null, id]
         );
 
         if (result.affectedRows > 0) {
-            console.log('[INFO] Perfil actualizado');
+            console.log(' Perfil actualizado');
             res.json({ success: true, message: 'Perfil actualizado correctamente' });
         } else {
             res.json({ success: false, message: 'Usuario no encontrado' });
         }
     } catch (error) {
-        console.error('[ERROR] Error al actualizar perfil:', error);
+        console.error(' Error al actualizar perfil:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -199,7 +337,7 @@ app.get('/api/exercises', async (req, res) => {
         );
         res.json({ success: true, exercises: rows });
     } catch (error) {
-        console.error('[ERROR] Error al obtener videos:', error);
+        console.error(' Error al obtener videos:', error);
         res.status(500).json({ success: false, error: 'Error al obtener ejercicios' });
     }
 });
@@ -237,7 +375,7 @@ app.get('/api/exercises/user/:id', async (req, res) => {
 
         res.json({ success: true, exercises: rows });
     } catch (error) {
-        console.error('[ERROR] Error al obtener videos para usuario:', error);
+        console.error(' Error al obtener videos para usuario:', error);
         res.status(500).json({ success: false, error: 'Error al obtener ejercicios' });
     }
 });
@@ -258,11 +396,11 @@ app.post('/api/ejercicio-realizado', async (req, res) => {
                 (id_usuario, id_video, duracion_segundos, calorias_quemadas, nivel_esfuerzo, completado, comentarios)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
             [id_usuario, id_video, duracion_segundos ?? null, calorias_quemadas ?? null,
-             nivel_esfuerzo ?? null, completado ?? 1, comentarios ?? null]
+                nivel_esfuerzo ?? null, completado ?? 1, comentarios ?? null]
         );
         res.json({ success: true, id: result.insertId, message: 'Ejercicio registrado correctamente' });
     } catch (error) {
-        console.error('[ERROR] Error al registrar ejercicio:', error);
+        console.error(' Error al registrar ejercicio:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -285,7 +423,7 @@ app.get('/api/ejercicio-realizado/:id_usuario', async (req, res) => {
         );
         res.json({ success: true, historial: rows });
     } catch (error) {
-        console.error('[ERROR] Error al obtener historial:', error);
+        console.error(' Error al obtener historial:', error);
         res.status(500).json({ success: false, message: 'Error del servidor' });
     }
 });
@@ -307,15 +445,15 @@ app.get('/api/evolucion/:id_usuario', async (req, res) => {
         );
         res.json({ success: true, evolucion: rows });
     } catch (error) {
-        console.error('[ERROR] Error al obtener evolución:', error);
+        console.error(' Error al obtener evolución:', error);
         res.status(500).json({ success: false, message: 'Error del servidor' });
     }
 });
 
 app.post('/api/evolucion', async (req, res) => {
     const { id_usuario, fecha_registro, peso, presion_arterial_sistolica,
-            presion_arterial_diastolica, frecuencia_cardiaca_reposo,
-            flexibilidad_cm, fuerza_prensalon_kg, equilibrio_segundos, notas } = req.body;
+        presion_arterial_diastolica, frecuencia_cardiaca_reposo,
+        flexibilidad_cm, fuerza_prensalon_kg, equilibrio_segundos, notas } = req.body;
 
     if (!id_usuario || !fecha_registro) {
         return res.status(400).json({ success: false, message: 'id_usuario y fecha_registro son obligatorios' });
@@ -329,12 +467,12 @@ app.post('/api/evolucion', async (req, res) => {
                  flexibilidad_cm, fuerza_prensalon_kg, equilibrio_segundos, notas)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [id_usuario, fecha_registro, peso ?? null, presion_arterial_sistolica ?? null,
-             presion_arterial_diastolica ?? null, frecuencia_cardiaca_reposo ?? null,
-             flexibilidad_cm ?? null, fuerza_prensalon_kg ?? null, equilibrio_segundos ?? null, notas ?? null]
+                presion_arterial_diastolica ?? null, frecuencia_cardiaca_reposo ?? null,
+                flexibilidad_cm ?? null, fuerza_prensalon_kg ?? null, equilibrio_segundos ?? null, notas ?? null]
         );
         res.json({ success: true, id: result.insertId, message: 'Evolución registrada correctamente' });
     } catch (error) {
-        console.error('[ERROR] Error al registrar evolución:', error);
+        console.error(' Error al registrar evolución:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -356,7 +494,7 @@ app.get('/api/reporte/:id_usuario', async (req, res) => {
         );
         res.json({ success: true, reportes: rows });
     } catch (error) {
-        console.error('[ERROR] Error al obtener reportes:', error);
+        console.error(' Error al obtener reportes:', error);
         res.status(500).json({ success: false, message: 'Error del servidor' });
     }
 });
@@ -378,7 +516,7 @@ app.get('/api/admin/videos', async (req, res) => {
         );
         res.json({ success: true, videos: rows });
     } catch (error) {
-        console.error('[ERROR] Error al obtener videos:', error);
+        console.error(' Error al obtener videos:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -386,10 +524,10 @@ app.get('/api/admin/videos', async (req, res) => {
 // Agregar video
 app.post('/api/admin/videos', async (req, res) => {
     const { nombre_video, descripcion, categoria, subcategoria, dificultad,
-            duracion_min, link_video, url_miniatura, calorias_estimadas,
-            edad_minima, edad_maxima, peso_maximo_recomendado } = req.body;
+        duracion_min, link_video, url_miniatura, calorias_estimadas,
+        edad_minima, edad_maxima, peso_maximo_recomendado, activo } = req.body;
 
-    if (!nombre_video || !categoria || !dificultad || !duracion_min || !link_video) {
+    if (!nombre_video || !categoria || !dificultad || duracion_min === undefined || duracion_min === null || !link_video) {
         return res.status(400).json({ success: false, message: 'nombre_video, categoria, dificultad, duracion_min y link_video son obligatorios' });
     }
 
@@ -398,16 +536,16 @@ app.post('/api/admin/videos', async (req, res) => {
             `INSERT INTO videos
                 (nombre_video, descripcion, categoria, subcategoria, dificultad,
                  duracion_min, link_video, url_miniatura, calorias_estimadas,
-                 edad_minima, edad_maxima, peso_maximo_recomendado)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 edad_minima, edad_maxima, peso_maximo_recomendado, activo)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [nombre_video, descripcion ?? null, categoria, subcategoria ?? null,
-             dificultad, duracion_min, link_video, url_miniatura ?? null,
-             calorias_estimadas ?? null, edad_minima ?? 60, edad_maxima ?? 100,
-             peso_maximo_recomendado ?? null]
+                dificultad, duracion_min, link_video, url_miniatura ?? null,
+                calorias_estimadas ?? null, edad_minima ?? 60, edad_maxima ?? 100,
+                peso_maximo_recomendado ?? null, activo ?? 1]
         );
         res.json({ success: true, id: result.insertId, message: 'Video agregado correctamente' });
     } catch (error) {
-        console.error('[ERROR] Error al agregar video:', error);
+        console.error(' Error al agregar video:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -416,8 +554,8 @@ app.post('/api/admin/videos', async (req, res) => {
 app.put('/api/admin/videos/:id', async (req, res) => {
     const { id } = req.params;
     const { nombre_video, descripcion, categoria, subcategoria, dificultad,
-            duracion_min, link_video, url_miniatura, calorias_estimadas,
-            edad_minima, edad_maxima, peso_maximo_recomendado, activo } = req.body;
+        duracion_min, link_video, url_miniatura, calorias_estimadas,
+        edad_minima, edad_maxima, peso_maximo_recomendado, activo } = req.body;
     try {
         const [result] = await pool.query(
             `UPDATE videos SET
@@ -427,9 +565,9 @@ app.put('/api/admin/videos/:id', async (req, res) => {
                 peso_maximo_recomendado = ?, activo = ?
              WHERE id_video = ?`,
             [nombre_video, descripcion ?? null, categoria, subcategoria ?? null,
-             dificultad, duracion_min, link_video, url_miniatura ?? null,
-             calorias_estimadas ?? null, edad_minima ?? 60, edad_maxima ?? 100,
-             peso_maximo_recomendado ?? null, activo ?? 1, id]
+                dificultad, duracion_min, link_video, url_miniatura ?? null,
+                calorias_estimadas ?? null, edad_minima ?? 60, edad_maxima ?? 100,
+                peso_maximo_recomendado ?? null, activo ?? 1, id]
         );
         if (result.affectedRows > 0) {
             res.json({ success: true, message: 'Video actualizado correctamente' });
@@ -437,7 +575,7 @@ app.put('/api/admin/videos/:id', async (req, res) => {
             res.json({ success: false, message: 'Video no encontrado' });
         }
     } catch (error) {
-        console.error('[ERROR] Error al editar video:', error);
+        console.error(' Error al editar video:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -445,7 +583,7 @@ app.put('/api/admin/videos/:id', async (req, res) => {
 // Borrar video
 app.delete('/api/admin/videos/:id', async (req, res) => {
     const { id } = req.params;
-    console.log('🗑️  DELETE video ID:', id);
+    console.log('  DELETE video ID:', id);
     try {
         const [result] = await pool.query('DELETE FROM videos WHERE id_video = ?', [id]);
         console.log('Filas afectadas:', result.affectedRows);
@@ -455,7 +593,7 @@ app.delete('/api/admin/videos/:id', async (req, res) => {
             res.json({ success: false, message: 'Video no encontrado' });
         }
     } catch (error) {
-        console.error('[ERROR] Error al borrar video:', error);
+        console.error(' Error al borrar video:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -476,7 +614,7 @@ app.get('/api/admin/config-ejercicios', async (req, res) => {
         );
         res.json({ success: true, configuraciones: rows });
     } catch (error) {
-        console.error('[ERROR] Error al obtener configuraciones:', error);
+        console.error(' Error al obtener configuraciones:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -484,10 +622,10 @@ app.get('/api/admin/config-ejercicios', async (req, res) => {
 // Agregar configuración
 app.post('/api/admin/config-ejercicios', async (req, res) => {
     const { edad_min, edad_max, peso_min, peso_max, nivel_dificultad,
-            condiciones_especiales, categoria_recomendada,
-            max_minutos_diarios, dias_semana_recomendados } = req.body;
+        condiciones_especiales, categoria_recomendada,
+        max_minutos_diarios, dias_semana_recomendados } = req.body;
 
-    if (!edad_min || !edad_max) {
+    if (edad_min === undefined || edad_max === undefined) {
         return res.status(400).json({ success: false, message: 'edad_min y edad_max son obligatorios' });
     }
 
@@ -499,13 +637,13 @@ app.post('/api/admin/config-ejercicios', async (req, res) => {
                  max_minutos_diarios, dias_semana_recomendados)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [edad_min, edad_max, peso_min ?? null, peso_max ?? null,
-             nivel_dificultad ?? null, condiciones_especiales ?? null,
-             categoria_recomendada ?? null,
-             max_minutos_diarios ?? 30, dias_semana_recomendados ?? 3]
+                nivel_dificultad ?? null, condiciones_especiales ?? null,
+                categoria_recomendada ?? null,
+                max_minutos_diarios ?? 30, dias_semana_recomendados ?? 3]
         );
         res.json({ success: true, id: result.insertId, message: 'Configuración agregada correctamente' });
     } catch (error) {
-        console.error('[ERROR] Error al agregar configuración:', error);
+        console.error(' Error al agregar configuración:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -514,8 +652,8 @@ app.post('/api/admin/config-ejercicios', async (req, res) => {
 app.put('/api/admin/config-ejercicios/:id', async (req, res) => {
     const { id } = req.params;
     const { edad_min, edad_max, peso_min, peso_max, nivel_dificultad,
-            condiciones_especiales, categoria_recomendada,
-            max_minutos_diarios, dias_semana_recomendados } = req.body;
+        condiciones_especiales, categoria_recomendada,
+        max_minutos_diarios, dias_semana_recomendados } = req.body;
     try {
         const [result] = await pool.query(
             `UPDATE configuracion_ejercicios SET
@@ -525,9 +663,9 @@ app.put('/api/admin/config-ejercicios/:id', async (req, res) => {
                 dias_semana_recomendados = ?
              WHERE id_config = ?`,
             [edad_min, edad_max, peso_min ?? null, peso_max ?? null,
-             nivel_dificultad ?? null, condiciones_especiales ?? null,
-             categoria_recomendada ?? null,
-             max_minutos_diarios ?? 30, dias_semana_recomendados ?? 3, id]
+                nivel_dificultad ?? null, condiciones_especiales ?? null,
+                categoria_recomendada ?? null,
+                max_minutos_diarios ?? 30, dias_semana_recomendados ?? 3, id]
         );
         if (result.affectedRows > 0) {
             res.json({ success: true, message: 'Configuración actualizada correctamente' });
@@ -535,7 +673,7 @@ app.put('/api/admin/config-ejercicios/:id', async (req, res) => {
             res.json({ success: false, message: 'Configuración no encontrada' });
         }
     } catch (error) {
-        console.error('[ERROR] Error al editar configuración:', error);
+        console.error(' Error al editar configuración:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -543,7 +681,7 @@ app.put('/api/admin/config-ejercicios/:id', async (req, res) => {
 // Borrar configuración
 app.delete('/api/admin/config-ejercicios/:id', async (req, res) => {
     const { id } = req.params;
-    console.log('🗑️  DELETE config ID:', id);
+    console.log('  DELETE config ID:', id);
     try {
         const [result] = await pool.query('DELETE FROM configuracion_ejercicios WHERE id_config = ?', [id]);
         console.log('Filas afectadas:', result.affectedRows);
@@ -553,7 +691,7 @@ app.delete('/api/admin/config-ejercicios/:id', async (req, res) => {
             res.json({ success: false, message: 'Configuración no encontrada' });
         }
     } catch (error) {
-        console.error('[ERROR] Error al borrar configuración:', error);
+        console.error(' Error al borrar configuración:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -583,7 +721,7 @@ app.get('/api/admin/usuarios', async (req, res) => {
 app.put('/api/admin/usuarios/:id', async (req, res) => {
     const { id } = req.params;
     const { nombre, email, peso, altura, genero, telefono, rol,
-            cuenta_activa, nivel_actividad, condiciones_medicas, restricciones } = req.body;
+        cuenta_activa, nivel_actividad, condiciones_medicas, restricciones } = req.body;
     try {
         const [result] = await pool.query(
             `UPDATE usuario SET
@@ -592,9 +730,9 @@ app.put('/api/admin/usuarios/:id', async (req, res) => {
                 nivel_actividad = ?, condiciones_medicas = ?, restricciones = ?
              WHERE id_usuario = ?`,
             [nombre, email, peso, altura ?? null, genero ?? null,
-             telefono ?? null, rol ?? 'usuario', cuenta_activa ?? 1,
-             nivel_actividad ?? 'sedentario', condiciones_medicas ?? null,
-             restricciones ?? null, id]
+                telefono ?? null, rol ?? 'usuario', cuenta_activa ?? 1,
+                nivel_actividad ?? 'sedentario', condiciones_medicas ?? null,
+                restricciones ?? null, id]
         );
         if (result.affectedRows > 0) {
             res.json({ success: true, message: 'Usuario actualizado correctamente' });
@@ -602,7 +740,7 @@ app.put('/api/admin/usuarios/:id', async (req, res) => {
             res.json({ success: false, message: 'Usuario no encontrado' });
         }
     } catch (error) {
-        console.error('[ERROR] Error al editar usuario:', error);
+        console.error(' Error al editar usuario:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -610,7 +748,7 @@ app.put('/api/admin/usuarios/:id', async (req, res) => {
 // Borrar usuario
 app.delete('/api/admin/usuarios/:id', async (req, res) => {
     const { id } = req.params;
-    console.log('🗑️  DELETE usuario ID:', id);
+    console.log('  DELETE usuario ID:', id);
     try {
         const [result] = await pool.query('DELETE FROM usuario WHERE id_usuario = ?', [id]);
         console.log('Filas afectadas:', result.affectedRows);
@@ -620,7 +758,7 @@ app.delete('/api/admin/usuarios/:id', async (req, res) => {
             res.json({ success: false, message: 'Usuario no encontrado' });
         }
     } catch (error) {
-        console.error('[ERROR] Error al borrar usuario:', error);
+        console.error(' Error al borrar usuario:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -656,7 +794,7 @@ app.get('/api/admin/videos', async (req, res) => {
         );
         res.json({ success: true, videos: rows });
     } catch (error) {
-        console.error('[ERROR] Error al listar videos (admin):', error);
+        console.error(' Error al listar videos (admin):', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -664,8 +802,8 @@ app.get('/api/admin/videos', async (req, res) => {
 // Crear video
 app.post('/api/admin/videos', async (req, res) => {
     const { nombre_video, descripcion, categoria, subcategoria, dificultad,
-            duracion_min, link_video, url_miniatura, calorias_estimadas,
-            edad_minima, edad_maxima, peso_maximo_recomendado, activo } = req.body;
+        duracion_min, link_video, url_miniatura, calorias_estimadas,
+        edad_minima, edad_maxima, peso_maximo_recomendado, activo } = req.body;
 
     if (!nombre_video || !categoria || !dificultad || !duracion_min || !link_video) {
         return res.status(400).json({ success: false, message: 'nombre_video, categoria, dificultad, duracion_min y link_video son obligatorios' });
@@ -679,13 +817,13 @@ app.post('/api/admin/videos', async (req, res) => {
                  edad_minima, edad_maxima, peso_maximo_recomendado, activo)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [nombre_video, descripcion ?? null, categoria, subcategoria ?? null,
-             dificultad, duracion_min, link_video, url_miniatura ?? null,
-             calorias_estimadas ?? null, edad_minima ?? 60, edad_maxima ?? 100,
-             peso_maximo_recomendado ?? null, activo ?? 1]
+                dificultad, duracion_min, link_video, url_miniatura ?? null,
+                calorias_estimadas ?? null, edad_minima ?? 60, edad_maxima ?? 100,
+                peso_maximo_recomendado ?? null, activo ?? 1]
         );
         res.json({ success: true, id: result.insertId, message: 'Video creado correctamente' });
     } catch (error) {
-        console.error('[ERROR] Error al crear video:', error);
+        console.error(' Error al crear video:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -694,8 +832,8 @@ app.post('/api/admin/videos', async (req, res) => {
 app.put('/api/admin/videos/:id', async (req, res) => {
     const { id } = req.params;
     const { nombre_video, descripcion, categoria, subcategoria, dificultad,
-            duracion_min, link_video, url_miniatura, calorias_estimadas,
-            edad_minima, edad_maxima, peso_maximo_recomendado, activo } = req.body;
+        duracion_min, link_video, url_miniatura, calorias_estimadas,
+        edad_minima, edad_maxima, peso_maximo_recomendado, activo } = req.body;
     try {
         const [result] = await pool.query(
             `UPDATE videos SET
@@ -705,9 +843,9 @@ app.put('/api/admin/videos/:id', async (req, res) => {
                 peso_maximo_recomendado = ?, activo = ?
              WHERE id_video = ?`,
             [nombre_video, descripcion ?? null, categoria, subcategoria ?? null,
-             dificultad, duracion_min, link_video, url_miniatura ?? null,
-             calorias_estimadas ?? null, edad_minima ?? 60, edad_maxima ?? 100,
-             peso_maximo_recomendado ?? null, activo ?? 1, id]
+                dificultad, duracion_min, link_video, url_miniatura ?? null,
+                calorias_estimadas ?? null, edad_minima ?? 60, edad_maxima ?? 100,
+                peso_maximo_recomendado ?? null, activo ?? 1, id]
         );
         if (result.affectedRows > 0) {
             res.json({ success: true, message: 'Video actualizado correctamente' });
@@ -715,7 +853,7 @@ app.put('/api/admin/videos/:id', async (req, res) => {
             res.json({ success: false, message: 'Video no encontrado' });
         }
     } catch (error) {
-        console.error('[ERROR] Error al editar video:', error);
+        console.error(' Error al editar video:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -723,7 +861,7 @@ app.put('/api/admin/videos/:id', async (req, res) => {
 // Eliminar video — llama al SP sp_eliminar_video
 app.post('/api/admin/videos/eliminar/:id', async (req, res) => {
     const { id } = req.params;
-    console.log('🗑️  sp_eliminar_video ID:', id);
+    console.log('  sp_eliminar_video ID:', id);
     try {
         const [[result]] = await pool.query('CALL sp_eliminar_video(?)', [id]);
         console.log('   filas_afectadas:', result.filas_afectadas);
@@ -733,7 +871,7 @@ app.post('/api/admin/videos/eliminar/:id', async (req, res) => {
             res.json({ success: false, message: 'Video no encontrado' });
         }
     } catch (error) {
-        console.error('[ERROR] Error al eliminar video:', error);
+        console.error(' Error al eliminar video:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -752,15 +890,15 @@ app.get('/api/admin/config-ejercicios', async (req, res) => {
         );
         res.json({ success: true, configuraciones: rows });
     } catch (error) {
-        console.error('[ERROR] Error al listar config:', error);
+        console.error(' Error al listar config:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
 app.post('/api/admin/config-ejercicios', async (req, res) => {
     const { edad_min, edad_max, peso_min, peso_max, nivel_dificultad,
-            condiciones_especiales, categoria_recomendada,
-            max_minutos_diarios, dias_semana_recomendados } = req.body;
+        condiciones_especiales, categoria_recomendada,
+        max_minutos_diarios, dias_semana_recomendados } = req.body;
 
     if (!edad_min || !edad_max) {
         return res.status(400).json({ success: false, message: 'edad_min y edad_max son obligatorios' });
@@ -774,13 +912,13 @@ app.post('/api/admin/config-ejercicios', async (req, res) => {
                  max_minutos_diarios, dias_semana_recomendados)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [edad_min, edad_max, peso_min ?? null, peso_max ?? null,
-             nivel_dificultad ?? 'baja', condiciones_especiales ?? null,
-             categoria_recomendada ?? null, max_minutos_diarios ?? 30,
-             dias_semana_recomendados ?? 3]
+                nivel_dificultad ?? 'baja', condiciones_especiales ?? null,
+                categoria_recomendada ?? null, max_minutos_diarios ?? 30,
+                dias_semana_recomendados ?? 3]
         );
         res.json({ success: true, id: result.insertId, message: 'Configuración creada correctamente' });
     } catch (error) {
-        console.error('[ERROR] Error al crear config:', error);
+        console.error(' Error al crear config:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -788,8 +926,8 @@ app.post('/api/admin/config-ejercicios', async (req, res) => {
 app.put('/api/admin/config-ejercicios/:id', async (req, res) => {
     const { id } = req.params;
     const { edad_min, edad_max, peso_min, peso_max, nivel_dificultad,
-            condiciones_especiales, categoria_recomendada,
-            max_minutos_diarios, dias_semana_recomendados } = req.body;
+        condiciones_especiales, categoria_recomendada,
+        max_minutos_diarios, dias_semana_recomendados } = req.body;
     try {
         const [result] = await pool.query(
             `UPDATE configuracion_ejercicios SET
@@ -799,9 +937,9 @@ app.put('/api/admin/config-ejercicios/:id', async (req, res) => {
                 dias_semana_recomendados = ?
              WHERE id_config = ?`,
             [edad_min, edad_max, peso_min ?? null, peso_max ?? null,
-             nivel_dificultad ?? 'baja', condiciones_especiales ?? null,
-             categoria_recomendada ?? null, max_minutos_diarios ?? 30,
-             dias_semana_recomendados ?? 3, id]
+                nivel_dificultad ?? 'baja', condiciones_especiales ?? null,
+                categoria_recomendada ?? null, max_minutos_diarios ?? 30,
+                dias_semana_recomendados ?? 3, id]
         );
         if (result.affectedRows > 0) {
             res.json({ success: true, message: 'Configuración actualizada correctamente' });
@@ -809,7 +947,7 @@ app.put('/api/admin/config-ejercicios/:id', async (req, res) => {
             res.json({ success: false, message: 'Configuración no encontrada' });
         }
     } catch (error) {
-        console.error('[ERROR] Error al editar config:', error);
+        console.error(' Error al editar config:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -817,7 +955,7 @@ app.put('/api/admin/config-ejercicios/:id', async (req, res) => {
 // Eliminar config — llama al SP sp_eliminar_config
 app.post('/api/admin/config-ejercicios/eliminar/:id', async (req, res) => {
     const { id } = req.params;
-    console.log('🗑️  sp_eliminar_config ID:', id);
+    console.log('  sp_eliminar_config ID:', id);
     try {
         const [[result]] = await pool.query('CALL sp_eliminar_config(?)', [id]);
         console.log('   filas_afectadas:', result.filas_afectadas);
@@ -827,7 +965,7 @@ app.post('/api/admin/config-ejercicios/eliminar/:id', async (req, res) => {
             res.json({ success: false, message: 'Configuración no encontrada' });
         }
     } catch (error) {
-        console.error('[ERROR] Error al eliminar config:', error);
+        console.error(' Error al eliminar config:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -847,7 +985,7 @@ app.get('/api/admin/usuarios', async (req, res) => {
         );
         res.json({ success: true, usuarios: rows });
     } catch (error) {
-        console.error('[ERROR] Error al listar usuarios (admin):', error);
+        console.error(' Error al listar usuarios (admin):', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -856,8 +994,8 @@ app.get('/api/admin/usuarios', async (req, res) => {
 app.put('/api/admin/usuarios/:id', async (req, res) => {
     const { id } = req.params;
     const { nombre, email, peso, altura, genero, telefono,
-            rol, cuenta_activa, nivel_actividad,
-            condiciones_medicas, restricciones } = req.body;
+        rol, cuenta_activa, nivel_actividad,
+        condiciones_medicas, restricciones } = req.body;
     try {
         const [result] = await pool.query(
             `UPDATE usuario SET
@@ -866,9 +1004,9 @@ app.put('/api/admin/usuarios/:id', async (req, res) => {
                 condiciones_medicas = ?, restricciones = ?
              WHERE id_usuario = ?`,
             [nombre, email, peso, altura ?? null, genero ?? null,
-             telefono ?? null, rol ?? 'usuario', cuenta_activa ?? 1,
-             nivel_actividad ?? 'sedentario', condiciones_medicas ?? null,
-             restricciones ?? null, id]
+                telefono ?? null, rol ?? 'usuario', cuenta_activa ?? 1,
+                nivel_actividad ?? 'sedentario', condiciones_medicas ?? null,
+                restricciones ?? null, id]
         );
         if (result.affectedRows > 0) {
             res.json({ success: true, message: 'Usuario actualizado correctamente' });
@@ -876,7 +1014,7 @@ app.put('/api/admin/usuarios/:id', async (req, res) => {
             res.json({ success: false, message: 'Usuario no encontrado' });
         }
     } catch (error) {
-        console.error('[ERROR] Error al editar usuario:', error);
+        console.error(' Error al editar usuario:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -884,7 +1022,7 @@ app.put('/api/admin/usuarios/:id', async (req, res) => {
 // Eliminar usuario — llama al SP sp_eliminar_usuario
 app.post('/api/admin/usuarios/eliminar/:id', async (req, res) => {
     const { id } = req.params;
-    console.log('🗑️  sp_eliminar_usuario ID:', id);
+    console.log('  sp_eliminar_usuario ID:', id);
     try {
         const [[result]] = await pool.query('CALL sp_eliminar_usuario(?)', [id]);
         console.log('   filas_afectadas:', result.filas_afectadas);
@@ -894,7 +1032,7 @@ app.post('/api/admin/usuarios/eliminar/:id', async (req, res) => {
             res.json({ success: false, message: 'Usuario no encontrado' });
         }
     } catch (error) {
-        console.error('[ERROR] Error al eliminar usuario:', error);
+        console.error('Error al eliminar usuario:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -903,14 +1041,14 @@ app.post('/api/admin/usuarios/eliminar/:id', async (req, res) => {
 // INICIAR SERVIDOR
 // ============================================
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[INFO] Servidor corriendo en puerto ${PORT}`);
-    console.log(`📍 Local:  http://localhost:${PORT}`);
-    console.log(`📍 Red:    http://192.168.100.14:${PORT}`);
-    console.log(`🔐 Login:          POST /api/login`);
-    console.log(`📝 Registro:       POST /api/register`);
-    console.log(`📋 Ejercicios:      GET /api/exercises`);
-    console.log(`🎯 Ejerc. usuario:  GET /api/exercises/user/:id`);
-    console.log(`✍️  Registrar ej.:  POST /api/ejercicio-realizado`);
-    console.log(`📈 Evolución:       GET /api/evolucion/:id_usuario`);
-    console.log(`📊 Reporte:         GET /api/reporte/:id_usuario`);
+    console.log(` Servidor corriendo en puerto ${PORT}`);
+    console.log(` Local:  http://localhost:${PORT}`);
+    console.log(` Red:    http://192.168.100.14:${PORT}`);
+    console.log(` Login:          POST /api/login`);
+    console.log(` Registro:       POST /api/register`);
+    console.log(` Ejercicios:      GET /api/exercises`);
+    console.log(` Ejerc. usuario:  GET /api/exercises/user/:id`);
+    console.log(`  Registrar ej.:  POST /api/ejercicio-realizado`);
+    console.log(` Evolución:       GET /api/evolucion/:id_usuario`);
+    console.log(` Reporte:         GET /api/reporte/:id_usuario`);
 });
