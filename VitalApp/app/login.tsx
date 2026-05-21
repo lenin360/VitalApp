@@ -233,6 +233,10 @@ const Inp = React.memo(({ icon, ph, val, set, secure, ac, kb, multi, rIcon, rPre
             autoCapitalize={ac}
             keyboardType={kb}
             multiline={multi}
+            autoComplete={secure ? "new-password" : "off"}
+            autoCorrect={false}
+            textContentType="none"
+            importantForAutofill="no"
         />
         {rIcon && (
             <TouchableOpacity onPress={rPress} style={{ padding: 4 }}>
@@ -267,6 +271,9 @@ export default function LoginScreen() {
     const [nivelActividad, setNivelActividad] = useState<'sedentario' | 'ligero' | 'moderado' | 'activo'>('sedentario');
     const [condicionesMedicas, setCondicionesMedicas] = useState('');
     const [restricciones, setRestricciones] = useState('');
+    const [requiresMfa, setRequiresMfa] = useState(false);
+    const [mfaToken, setMfaToken] = useState('');
+    const [tempUserId, setTempUserId] = useState<number | null>(null);
     const router = useRouter();
 
     // ── LOGIN ─────────────────────────────────────────────────────────────────
@@ -284,6 +291,11 @@ export default function LoginScreen() {
             });
             const data = await res.json();
             if (data.success) {
+                if (data.requiresMfa) {
+                    setRequiresMfa(true);
+                    setTempUserId(data.userId);
+                    return;
+                }
                 const u = data.user;
                 await AsyncStorage.setItem('userId', u.id_usuario.toString());
                 await AsyncStorage.setItem('userName', u.nombre || '');
@@ -293,6 +305,38 @@ export default function LoginScreen() {
                 router.replace(u.rol === 'admin' ? '/admin' : '/home');
             } else {
                 setErrorLogin(true);
+            }
+        } catch (e: any) {
+            Alert.alert('Error de conexión', e.message);
+        } finally {
+            setCargando(false);
+        }
+    };
+
+    // ── MFA VERIFICACIÓN ──────────────────────────────────────────────────────
+    const handleMfaVerify = async () => {
+        if (!mfaToken) {
+            Alert.alert('Faltan datos', 'Ingresa el código de 6 dígitos.');
+            return;
+        }
+        setCargando(true);
+        try {
+            const res = await fetch(`${API_URL}/mfa/verify-login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: tempUserId, token: mfaToken }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                const u = data.user;
+                await AsyncStorage.setItem('userId', u.id_usuario.toString());
+                await AsyncStorage.setItem('userName', u.nombre || '');
+                await AsyncStorage.setItem('userEmail', u.email || '');
+                await AsyncStorage.setItem('userAge', (u.edad ?? '').toString());
+                await AsyncStorage.setItem('userRol', u.rol || 'usuario');
+                router.replace(u.rol === 'admin' ? '/admin' : '/home');
+            } else {
+                Alert.alert('Error', data.message || 'Código incorrecto.');
             }
         } catch (e: any) {
             Alert.alert('Error de conexión', e.message);
@@ -388,107 +432,135 @@ export default function LoginScreen() {
                     {/* Tarjeta */}
                     <View style={st.card}>
                         <Text style={st.cardTitle}>{isRegistering ? 'Crear cuenta' : 'Iniciar Sesión'}</Text>
-                        <Text style={st.cardSub}>{isRegistering ? 'Únete a VitalApp hoy' : 'Bienvenido de nuevo'}</Text>
+                        <Text style={st.cardSub}>{isRegistering ? 'Únete a VitalApp hoy' : (requiresMfa ? 'Verificación en dos pasos' : 'Bienvenido de nuevo')}</Text>
 
-                        {isRegistering && (
+                        {requiresMfa ? (
                             <>
-                                <Lab text="Nombre completo *" />
-                                <Inp icon="person-outline" ph="Ej: Juan Pérez" val={nombre} set={setNombre} />
-                                <Lab text="Fecha de nacimiento *" />
-                                <Inp icon="calendar-outline" ph="AAAA-MM-DD" val={fechaNacimiento} set={setFechaNacimiento} />
-                                <Lab text="Peso (kg) *" />
-                                <Inp icon="barbell-outline" ph="Ej: 75.5" val={peso} set={setPeso} kb="numeric" />
-                                <Lab text="Altura (m)" />
-                                <Inp icon="resize-outline" ph="Ej: 1.70" val={altura} set={setAltura} kb="numeric" />
+                                <Lab text="Código de Autenticación (MFA)" />
+                                <Inp icon="key-outline" ph="123456" val={mfaToken} set={setMfaToken} kb="numeric" />
+                                
+                                <TouchableOpacity
+                                    style={[st.btnWrap, cargando && { opacity: 0.6 }]}
+                                    onPress={handleMfaVerify}
+                                    disabled={cargando}
+                                    activeOpacity={0.85}
+                                >
+                                    <LinearGradient colors={['#1E5FE6', '#1340A0']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={st.btnGrad}>
+                                        {cargando ? <ActivityIndicator color="#fff" size="small" /> : <Text style={st.btnTxt}>Verificar</Text>}
+                                    </LinearGradient>
+                                </TouchableOpacity>
 
-                                <Lab text="Género" />
-                                <View style={st.pills}>
-                                    {(['M', 'F', 'Otro'] as const).map(op => (
-                                        <TouchableOpacity
-                                            key={op}
-                                            style={[st.pill, genero === op && st.pillOn]}
-                                            onPress={() => setGenero(op)}
-                                        >
-                                            <Text style={[st.pillTxt, genero === op && st.pillTxtOn]}>
-                                                {op === 'M' ? 'Masculino' : op === 'F' ? 'Femenino' : 'Otro'}
+                                <TouchableOpacity
+                                    style={st.switchRow}
+                                    onPress={() => { setRequiresMfa(false); setMfaToken(''); }}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={st.switchTxt}>Volver al inicio de sesión</Text>
+                                </TouchableOpacity>
+                            </>
+                        ) : (
+                            <>
+                                {isRegistering && (
+                                    <>
+                                        <Lab text="Nombre completo *" />
+                                        <Inp icon="person-outline" ph="Ej: Juan Pérez" val={nombre} set={setNombre} />
+                                        <Lab text="Fecha de nacimiento *" />
+                                        <Inp icon="calendar-outline" ph="AAAA-MM-DD" val={fechaNacimiento} set={setFechaNacimiento} />
+                                        <Lab text="Peso (kg) *" />
+                                        <Inp icon="barbell-outline" ph="Ej: 75.5" val={peso} set={setPeso} kb="numeric" />
+                                        <Lab text="Altura (m)" />
+                                        <Inp icon="resize-outline" ph="Ej: 1.70" val={altura} set={setAltura} kb="numeric" />
+
+                                        <Lab text="Género" />
+                                        <View style={st.pills}>
+                                            {(['M', 'F', 'Otro'] as const).map(op => (
+                                                <TouchableOpacity
+                                                    key={op}
+                                                    style={[st.pill, genero === op && st.pillOn]}
+                                                    onPress={() => setGenero(op)}
+                                                >
+                                                    <Text style={[st.pillTxt, genero === op && st.pillTxtOn]}>
+                                                        {op === 'M' ? 'Masculino' : op === 'F' ? 'Femenino' : 'Otro'}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+
+                                        <Lab text="Teléfono" />
+                                        <Inp icon="call-outline" ph="Ej: 312 123 4567" val={telefono} set={setTelefono} kb="phone-pad" />
+
+                                        <Lab text="Nivel de actividad" />
+                                        <View style={st.pills}>
+                                            {(['sedentario', 'ligero', 'moderado', 'activo'] as const).map(op => (
+                                                <TouchableOpacity
+                                                    key={op}
+                                                    style={[st.pill, nivelActividad === op && st.pillOn]}
+                                                    onPress={() => setNivelActividad(op)}
+                                                >
+                                                    <Text style={[st.pillTxt, nivelActividad === op && st.pillTxtOn]}>
+                                                        {op.charAt(0).toUpperCase() + op.slice(1)}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+
+                                        <Lab text="Condiciones médicas" />
+                                        <Inp icon="medkit-outline" ph="Ej: Diabetes…" val={condicionesMedicas} set={setCondicionesMedicas} multi />
+                                        <Lab text="Restricciones físicas" />
+                                        <Inp icon="warning-outline" ph="Ej: No levantar peso…" val={restricciones} set={setRestricciones} multi />
+                                    </>
+                                )}
+
+                                <Lab text="Usuario (correo)" />
+                                <Inp icon="person-outline" ph="tu@correo.com" val={email} set={setEmail} ac="none" kb="email-address" />
+
+                                <Lab text="Contraseña" />
+                                <Inp
+                                    icon="lock-closed-outline"
+                                    ph="••••••••"
+                                    val={password}
+                                    set={setPassword}
+                                    secure={!showPass}
+                                    rIcon={showPass ? 'eye-off-outline' : 'eye-outline'}
+                                    rPress={() => setShowPass(v => !v)}
+                                />
+
+                                {/* Botón */}
+                                <TouchableOpacity
+                                    style={[st.btnWrap, cargando && { opacity: 0.6 }]}
+                                    onPress={isRegistering ? handleRegister : handleLogin}
+                                    disabled={cargando}
+                                    activeOpacity={0.85}
+                                >
+                                    <LinearGradient
+                                        colors={['#1E5FE6', '#1340A0']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                        style={st.btnGrad}
+                                    >
+                                        {cargando ?
+                                            <ActivityIndicator color="#fff" size="small" /> :
+                                            <Text style={st.btnTxt}>
+                                                {isRegistering ? 'Crear mi cuenta' : 'Entrar'}
                                             </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
+                                        }
+                                    </LinearGradient>
+                                </TouchableOpacity>
 
-                                <Lab text="Teléfono" />
-                                <Inp icon="call-outline" ph="Ej: 312 123 4567" val={telefono} set={setTelefono} kb="phone-pad" />
-
-                                <Lab text="Nivel de actividad" />
-                                <View style={st.pills}>
-                                    {(['sedentario', 'ligero', 'moderado', 'activo'] as const).map(op => (
-                                        <TouchableOpacity
-                                            key={op}
-                                            style={[st.pill, nivelActividad === op && st.pillOn]}
-                                            onPress={() => setNivelActividad(op)}
-                                        >
-                                            <Text style={[st.pillTxt, nivelActividad === op && st.pillTxtOn]}>
-                                                {op.charAt(0).toUpperCase() + op.slice(1)}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-
-                                <Lab text="Condiciones médicas" />
-                                <Inp icon="medkit-outline" ph="Ej: Diabetes…" val={condicionesMedicas} set={setCondicionesMedicas} multi />
-                                <Lab text="Restricciones físicas" />
-                                <Inp icon="warning-outline" ph="Ej: No levantar peso…" val={restricciones} set={setRestricciones} multi />
+                                <TouchableOpacity
+                                    style={st.switchRow}
+                                    onPress={() => setIsRegistering(!isRegistering)}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={st.switchTxt}>
+                                        {isRegistering ? '¿Ya tienes cuenta?  ' : '¿Eres nuevo aquí?  '}
+                                    </Text>
+                                    <Text style={st.switchBold}>
+                                        {isRegistering ? 'Inicia sesión' : 'Registrarse'}
+                                    </Text>
+                                </TouchableOpacity>
                             </>
                         )}
-
-                        <Lab text="Usuario (correo)" />
-                        <Inp icon="person-outline" ph="tu@correo.com" val={email} set={setEmail} ac="none" kb="email-address" />
-
-                        <Lab text="Contraseña" />
-                        <Inp
-                            icon="lock-closed-outline"
-                            ph="••••••••"
-                            val={password}
-                            set={setPassword}
-                            secure={!showPass}
-                            rIcon={showPass ? 'eye-off-outline' : 'eye-outline'}
-                            rPress={() => setShowPass(v => !v)}
-                        />
-
-                        {/* Botón */}
-                        <TouchableOpacity
-                            style={[st.btnWrap, cargando && { opacity: 0.6 }]}
-                            onPress={isRegistering ? handleRegister : handleLogin}
-                            disabled={cargando}
-                            activeOpacity={0.85}
-                        >
-                            <LinearGradient
-                                colors={['#1E5FE6', '#1340A0']}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                                style={st.btnGrad}
-                            >
-                                {cargando ?
-                                    <ActivityIndicator color="#fff" size="small" /> :
-                                    <Text style={st.btnTxt}>
-                                        {isRegistering ? 'Crear mi cuenta' : 'Entrar'}
-                                    </Text>
-                                }
-                            </LinearGradient>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={st.switchRow}
-                            onPress={() => setIsRegistering(!isRegistering)}
-                            activeOpacity={0.7}
-                        >
-                            <Text style={st.switchTxt}>
-                                {isRegistering ? '¿Ya tienes cuenta?  ' : '¿Eres nuevo aquí?  '}
-                            </Text>
-                            <Text style={st.switchBold}>
-                                {isRegistering ? 'Inicia sesión' : 'Registrarse'}
-                            </Text>
-                        </TouchableOpacity>
                     </View>
 
                     <View style={{ height: 32 }} />
