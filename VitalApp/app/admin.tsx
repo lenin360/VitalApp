@@ -233,7 +233,15 @@ export default function AdminScreen() {
 
     useEffect(() => { cargar(); }, [cargar]);
 
-    // ── VIDEOS — acciones ──────────────────────────────────────────────────────
+    // ── CONFIG — acciones ──────────────────────────────────────────────────────
+    const mostrarAlerta = (titulo: string, mensaje: string) => {
+        if (Platform.OS === 'web') {
+            window.alert(`${titulo}\n${mensaje}`);
+        } else {
+            Alert.alert(titulo, mensaje);
+        }
+    };
+
     const abrirNuevoVideo = () => {
         setVideoEdit(null);
         setFVideo(VIDEO_VACIO);
@@ -247,8 +255,8 @@ export default function AdminScreen() {
     };
 
     const guardarVideo = async () => {
-        if (!fVideo.nombre_video || !fVideo.categoria || !fVideo.link_video) {
-            Alert.alert('Faltan datos', 'Nombre, categoría y link son obligatorios.');
+        if (!fVideo.nombre_video || !fVideo.categoria || !fVideo.link_video || fVideo.duracion_min === undefined || fVideo.duracion_min === null) {
+            mostrarAlerta('Faltan datos', 'Nombre, categoría, duración y link son obligatorios.');
             return;
         }
         setCargando(true);
@@ -260,29 +268,36 @@ export default function AdminScreen() {
                 setModalVideo(false);
                 cargar();
             } else {
-                Alert.alert('Error', d.message);
+                mostrarAlerta('Error', d.message);
             }
-        } catch { Alert.alert('Error', 'No se pudo guardar.'); }
+        } catch { mostrarAlerta('Error', 'No se pudo guardar.'); }
         finally { setCargando(false); }
     };
 
-    const eliminarVideo = (v: Video) => {
-        Alert.alert('Eliminar video', `¿Eliminar "${v.nombre_video}"?`, [
-            { text: 'Cancelar', style: 'cancel' },
-            {
-                text: 'Eliminar', style: 'destructive',
-                onPress: async () => {
-                    setCargando(true);
-                    try {
-                        const d = await api(`/admin/videos/eliminar/${v.id_video}`, 'POST');
-                        if (d.success) { Alert.alert('✅', 'Video eliminado.'); cargar(); }
-                        else Alert.alert('Error', d.message);
-                    } catch (e: any) {
-                        Alert.alert('Error', e.message);
-                    } finally { setCargando(false); }
-                }
+    const confirmarEliminacion = (titulo: string, mensaje: string, onConfirm: () => void) => {
+        if (Platform.OS === 'web') {
+            if (window.confirm(`${titulo}\n${mensaje}`)) {
+                onConfirm();
             }
-        ]);
+        } else {
+            Alert.alert(titulo, mensaje, [
+                { text: 'Cancelar', style: 'cancel' },
+                { text: 'Eliminar', style: 'destructive', onPress: onConfirm }
+            ]);
+        }
+    };
+
+    const eliminarVideo = (v: Video) => {
+        confirmarEliminacion('Eliminar video', `¿Eliminar "${v.nombre_video}"?`, async () => {
+            setCargando(true);
+            try {
+                const d = await api(`/admin/videos/${v.id_video}`, 'DELETE');
+                if (d.success) { Alert.alert('', 'Video eliminado.'); cargar(); }
+                else Alert.alert('Error', d.message);
+            } catch (e: any) {
+                Alert.alert('Error', e.message);
+            } finally { setCargando(false); }
+        });
     };
 
     // ── CONFIG — acciones ──────────────────────────────────────────────────────
@@ -299,8 +314,8 @@ export default function AdminScreen() {
     };
 
     const guardarConfig = async () => {
-        if (!fConfig.edad_min || !fConfig.edad_max) {
-            Alert.alert('Faltan datos', 'Edad mínima y máxima son obligatorias.');
+        if (fConfig.edad_min === undefined || fConfig.edad_max === undefined) {
+            mostrarAlerta('Faltan datos', 'Edad mínima y máxima son obligatorias.');
             return;
         }
         setCargando(true);
@@ -309,28 +324,22 @@ export default function AdminScreen() {
                 ? await api(`/admin/config-ejercicios/${configEdit.id_config}`, 'PUT', fConfig)
                 : await api('/admin/config-ejercicios', 'POST', fConfig);
             if (d.success) { setModalConfig(false); cargar(); }
-            else Alert.alert('Error', d.message);
-        } catch { Alert.alert('Error', 'No se pudo guardar.'); }
+            else mostrarAlerta('Error', d.message);
+        } catch { mostrarAlerta('Error', 'No se pudo guardar.'); }
         finally { setCargando(false); }
     };
 
     const eliminarConfig = (c: ConfigEjercicio) => {
-        Alert.alert('Eliminar configuración', `¿Eliminar config #${c.id_config}?`, [
-            { text: 'Cancelar', style: 'cancel' },
-            {
-                text: 'Eliminar', style: 'destructive',
-                onPress: async () => {
-                    setCargando(true);
-                    try {
-                        const d = await api(`/admin/config-ejercicios/eliminar/${c.id_config}`, 'POST');
-                        if (d.success) { Alert.alert('✅', 'Configuración eliminada.'); cargar(); }
-                        else Alert.alert('Error', d.message);
-                    } catch (e: any) {
-                        Alert.alert('Error', e.message);
-                    } finally { setCargando(false); }
-                }
-            }
-        ]);
+        confirmarEliminacion('Eliminar configuración', `¿Eliminar config #${c.id_config}?`, async () => {
+            setCargando(true);
+            try {
+                const d = await api(`/admin/config-ejercicios/${c.id_config}`, 'DELETE');
+                if (d.success) { Alert.alert('', 'Configuración eliminada.'); cargar(); }
+                else Alert.alert('Error', d.message);
+            } catch (e: any) {
+                Alert.alert('Error', e.message);
+            } finally { setCargando(false); }
+        });
     };
 
     // ── USUARIOS — acciones ────────────────────────────────────────────────────
@@ -342,35 +351,29 @@ export default function AdminScreen() {
 
     const guardarUsuario = async () => {
         if (!fUsuario.nombre || !fUsuario.email) {
-            Alert.alert('Faltan datos', 'Nombre y email son obligatorios.');
+            mostrarAlerta('Faltan datos', 'Nombre y email son obligatorios.');
             return;
         }
         setCargando(true);
         try {
             const d = await api(`/admin/usuarios/${usuarioEdit?.id_usuario}`, 'PUT', fUsuario);
             if (d.success) { setModalUsuario(false); cargar(); }
-            else Alert.alert('Error', d.message);
-        } catch { Alert.alert('Error', 'No se pudo guardar.'); }
+            else mostrarAlerta('Error', d.message);
+        } catch { mostrarAlerta('Error', 'No se pudo guardar.'); }
         finally { setCargando(false); }
     };
 
     const eliminarUsuario = (u: Usuario) => {
-        Alert.alert('Eliminar usuario', `¿Eliminar a "${u.nombre}"?\nSe eliminarán también sus ejercicios y rutinas.`, [
-            { text: 'Cancelar', style: 'cancel' },
-            {
-                text: 'Eliminar', style: 'destructive',
-                onPress: async () => {
-                    setCargando(true);
-                    try {
-                        const d = await api(`/admin/usuarios/eliminar/${u.id_usuario}`, 'POST');
-                        if (d.success) { Alert.alert('✅', `Usuario "${u.nombre}" eliminado.`); cargar(); }
-                        else Alert.alert('Error', d.message);
-                    } catch (e: any) {
-                        Alert.alert('Error', e.message);
-                    } finally { setCargando(false); }
-                }
-            }
-        ]);
+        confirmarEliminacion('Eliminar usuario', `¿Eliminar a "${u.nombre}"?\nSe eliminarán también sus ejercicios y rutinas.`, async () => {
+            setCargando(true);
+            try {
+                const d = await api(`/admin/usuarios/${u.id_usuario}`, 'DELETE');
+                if (d.success) { Alert.alert('', `Usuario "${u.nombre}" eliminado.`); cargar(); }
+                else Alert.alert('Error', d.message);
+            } catch (e: any) {
+                Alert.alert('Error', e.message);
+            } finally { setCargando(false); }
+        });
     };
 
     // ── Badges ────────────────────────────────────────────────────────────────
@@ -546,7 +549,7 @@ export default function AdminScreen() {
                                 </View>
                                 {c.condiciones_especiales ? (
                                     <Text style={s.condicionTxt} numberOfLines={2}>
-                                        📋 {c.condiciones_especiales}
+                                         {c.condiciones_especiales}
                                     </Text>
                                 ) : null}
                                 <View style={s.tarjetaAcciones}>
@@ -607,7 +610,7 @@ export default function AdminScreen() {
                                 </View>
                                 {u.condiciones_medicas ? (
                                     <Text style={s.condicionTxt} numberOfLines={1}>
-                                        🏥 {u.condiciones_medicas}
+                                         {u.condiciones_medicas}
                                     </Text>
                                 ) : null}
                                 <View style={s.tarjetaAcciones}>

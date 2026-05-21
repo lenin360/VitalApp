@@ -11,7 +11,9 @@ import {
     ActivityIndicator,
     StatusBar,
     Switch,
-    Platform
+    Platform,
+    Modal,
+    Image
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,6 +41,12 @@ export default function PerfilScreen() {
     const [notificaciones, setNotificaciones] = useState(true);
     const [mostrarMensaje, setMostrarMensaje] = useState('');
     const [mensajeError, setMensajeError] = useState('');
+    const [mfaEnabled, setMfaEnabled] = useState(false);
+    const [mfaModalVisible, setMfaModalVisible] = useState(false);
+    const [mfaQrCode, setMfaQrCode] = useState('');
+    const [mfaSecret, setMfaSecret] = useState('');
+    const [mfaTokenInput, setMfaTokenInput] = useState('');
+    const [mfaLoading, setMfaLoading] = useState(false);
 
     // Cargar datos cada vez que la pantalla tiene foco
     useFocusEffect(
@@ -81,6 +89,9 @@ export default function PerfilScreen() {
                         pesoBackend = data.user.peso?.toString() || pesoBackend;
                         nombreBackend = data.user.nombre || nombreBackend;
                         emailBackend = data.user.email || emailBackend;
+                        if (data.user.mfa_enabled !== undefined) {
+                            setMfaEnabled(!!data.user.mfa_enabled);
+                        }
 
                         // Actualizar AsyncStorage con los datos frescos del backend
                         await AsyncStorage.setItem('userAge', edadBackend);
@@ -182,6 +193,122 @@ export default function PerfilScreen() {
                 }
             ]
         );
+    };
+
+    const handleSetupMfa = async () => {
+        if (mfaEnabled) {
+            Alert.alert("Aviso", "La seguridad de 2 pasos ya está activada.");
+            return;
+        }
+        setMfaLoading(true);
+        try {
+            const response = await fetch(`${API_URL}/mfa/setup`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: usuario.id })
+            });
+            const data = await response.json();
+            if (data.success) {
+                setMfaQrCode(data.qrCode);
+                setMfaSecret(data.secret);
+                setMfaModalVisible(true);
+            } else {
+                Alert.alert("Error", data.message || "No se pudo iniciar la configuración.");
+            }
+        } catch (error: any) {
+            Alert.alert("Error", error.message);
+        } finally {
+            setMfaLoading(false);
+        }
+    };
+
+    const handleVerifyMfa = async () => {
+        if (!mfaTokenInput || mfaTokenInput.length !== 6) {
+            Alert.alert("Error", "Ingresa un código válido de 6 dígitos.");
+            return;
+        }
+        setMfaLoading(true);
+        try {
+            const response = await fetch(`${API_URL}/mfa/enable`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: usuario.id, token: mfaTokenInput })
+            });
+            const data = await response.json();
+            if (data.success) {
+                setMfaEnabled(true);
+                setMfaModalVisible(false);
+                setMfaTokenInput('');
+                Alert.alert("¡Éxito!", "La seguridad de 2 pasos se activó correctamente.");
+            } else {
+                Alert.alert("Error", data.message || "Código incorrecto.");
+            }
+        } catch (error: any) {
+            Alert.alert("Error", error.message);
+        } finally {
+            setMfaLoading(false);
+        }
+    };
+
+    const handleDisableMfa = () => {
+        if (Platform.OS === 'web') {
+            const confirmed = window.confirm('¿Estás seguro de que deseas desactivar la autenticación de dos factores?');
+            if (confirmed) {
+                ejecutarDesactivarMfa();
+            }
+        } else {
+            Alert.alert(
+                'Desactivar Seguridad de 2 Pasos',
+                '¿Estás seguro de que deseas desactivar la autenticación de dos factores?',
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                        text: 'Desactivar',
+                        style: 'destructive',
+                        onPress: ejecutarDesactivarMfa
+                    }
+                ]
+            );
+        }
+    };
+
+    const ejecutarDesactivarMfa = async () => {
+        setMfaLoading(true);
+        console.log("Iniciando desactivación de MFA para ID:", usuario.id);
+        try {
+            const response = await fetch(`${API_URL}/mfa/disable`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: usuario.id })
+            });
+            const data = await response.json();
+            if (data.success) {
+                setMfaEnabled(false);
+                if (Platform.OS === 'web') {
+                    window.alert("La seguridad de 2 pasos ha sido desactivada.");
+                } else {
+                    Alert.alert("MFA Desactivado", "La seguridad de 2 pasos ha sido desactivada.");
+                }
+                console.log("MFA desactivado con éxito");
+            } else {
+                const errorMsg = data.message || "No se pudo desactivar.";
+                if (Platform.OS === 'web') {
+                    window.alert("Error: " + errorMsg);
+                } else {
+                    Alert.alert("Error", errorMsg);
+                }
+                console.log("Error del servidor al desactivar:", errorMsg);
+            }
+        } catch (error: any) {
+            console.error("Error de red al desactivar MFA:", error);
+            if (Platform.OS === 'web') {
+                window.alert("Error: " + error.message);
+            } else {
+                Alert.alert("Error", error.message);
+            }
+        } finally {
+            setMfaLoading(false);
+        }
     };
 
     // Eliminado el objeto colors local ya que usamos el del hook useTheme
@@ -300,25 +427,25 @@ export default function PerfilScreen() {
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -5 }}>
                         <View style={styles.badgeItem}>
                             <View style={[styles.badgeCircle, usuario.ejerciciosCompletados >= 1 ? { backgroundColor: '#FEF3C7' } : { backgroundColor: '#F1F5F9' }]}>
-                                <Text style={[styles.badgeEmoji, usuario.ejerciciosCompletados < 1 && { opacity: 0.3 }]}>🌟</Text>
+                                <Text style={[styles.badgeEmoji, usuario.ejerciciosCompletados < 1 && { opacity: 0.3 }]}></Text>
                             </View>
                             <Text style={[styles.badgeLabel, { color: colors.textSecondary }]}>Inicio</Text>
                         </View>
                         <View style={styles.badgeItem}>
                             <View style={[styles.badgeCircle, usuario.rachaDias >= 5 ? { backgroundColor: '#FEE2E2' } : { backgroundColor: '#F1F5F9' }]}>
-                                <Text style={[styles.badgeEmoji, usuario.rachaDias < 5 && { opacity: 0.3 }]}>🔥</Text>
+                                <Text style={[styles.badgeEmoji, usuario.rachaDias < 5 && { opacity: 0.3 }]}></Text>
                             </View>
                             <Text style={[styles.badgeLabel, { color: colors.textSecondary }]}>Constante</Text>
                         </View>
                         <View style={styles.badgeItem}>
                             <View style={[styles.badgeCircle, usuario.ejerciciosCompletados >= 10 ? { backgroundColor: '#E0E7FF' } : { backgroundColor: '#F1F5F9' }]}>
-                                <Text style={[styles.badgeEmoji, usuario.ejerciciosCompletados < 10 && { opacity: 0.3 }]}>🎯</Text>
+                                <Text style={[styles.badgeEmoji, usuario.ejerciciosCompletados < 10 && { opacity: 0.3 }]}></Text>
                             </View>
                             <Text style={[styles.badgeLabel, { color: colors.textSecondary }]}>Experto</Text>
                         </View>
                         <View style={styles.badgeItem}>
                             <View style={[styles.badgeCircle, usuario.ejerciciosCompletados >= 25 ? { backgroundColor: '#D1FAE5' } : { backgroundColor: '#F1F5F9' }]}>
-                                <Text style={[styles.badgeEmoji, usuario.ejerciciosCompletados < 25 && { opacity: 0.3 }]}>👑</Text>
+                                <Text style={[styles.badgeEmoji, usuario.ejerciciosCompletados < 25 && { opacity: 0.3 }]}></Text>
                             </View>
                             <Text style={[styles.badgeLabel, { color: colors.textSecondary }]}>Maestro</Text>
                         </View>
@@ -424,6 +551,23 @@ export default function PerfilScreen() {
                     </View>
 
                     <TouchableOpacity
+                        style={[styles.settingItem, { borderBottomWidth: 1 }]}
+                        onPress={() => mfaEnabled ? handleDisableMfa() : handleSetupMfa()}
+                        activeOpacity={0.7}
+                    >
+                        <View style={[styles.settingIcon, { backgroundColor: temaOscuro ? '#064E3B' : '#D1FAE5' }]}>
+                            <Ionicons name={mfaEnabled ? "shield-checkmark" : "shield-outline"} size={24} color="#10B981" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.settingText, { color: colors.text }]}>Seguridad 2 Pasos (MFA)</Text>
+                            <Text style={{ color: mfaEnabled ? '#10B981' : '#EF4444', fontSize: 12, fontWeight: 'bold', marginTop: 2 }}>
+                                {mfaEnabled ? 'ACTIVADO' : 'DESACTIVADO'}
+                            </Text>
+                        </View>
+                        {mfaLoading ? <ActivityIndicator color="#2563EB" /> : <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
                         style={[styles.settingItem, { borderBottomWidth: 0 }]}
                         onPress={() => router.push('/recordatorios')}
                         activeOpacity={0.7}
@@ -447,6 +591,65 @@ export default function PerfilScreen() {
                 </TouchableOpacity>
 
             </ScrollView>
+
+            {/* Modal de Configuración MFA */}
+            <Modal
+                visible={mfaModalVisible}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setMfaModalVisible(false)}
+            >
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+                    <View style={{ backgroundColor: colors.card, width: '100%', borderRadius: 24, padding: 24, alignItems: 'center' }}>
+                        <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
+                            <Ionicons name="shield-checkmark" size={32} color="#2563EB" />
+                        </View>
+                        
+                        <Text style={{ fontSize: 22, fontWeight: '800', color: colors.text, marginBottom: 8, textAlign: 'center' }}>Activar Verificación</Text>
+                        <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginBottom: 20 }}>
+                            Abre la aplicación Google Authenticator y escanea el siguiente código QR:
+                        </Text>
+                        
+                        {mfaQrCode ? (
+                            <Image
+                                source={{ uri: mfaQrCode }}
+                                style={{ width: 200, height: 200, marginBottom: 20 }}
+                                resizeMode="contain"
+                            />
+                        ) : (
+                            <ActivityIndicator size="large" color="#2563EB" style={{ marginVertical: 40 }} />
+                        )}
+                        
+                        <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 8 }}>¿No puedes escanear? Usa este código:</Text>
+                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#2563EB', marginBottom: 20, letterSpacing: 2 }}>{mfaSecret}</Text>
+                        
+                        <TextInput
+                            style={{ borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 12, width: '100%', padding: 16, fontSize: 20, textAlign: 'center', letterSpacing: 8, backgroundColor: colors.inputBg, color: colors.inputText, marginBottom: 20 }}
+                            placeholder="000000"
+                            placeholderTextColor="#94A3B8"
+                            keyboardType="numeric"
+                            maxLength={6}
+                            value={mfaTokenInput}
+                            onChangeText={setMfaTokenInput}
+                        />
+                        
+                        <TouchableOpacity
+                            style={{ backgroundColor: '#2563EB', width: '100%', padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 12 }}
+                            onPress={handleVerifyMfa}
+                            disabled={mfaLoading}
+                        >
+                            {mfaLoading ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Verificar y Activar</Text>}
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity
+                            style={{ padding: 12 }}
+                            onPress={() => setMfaModalVisible(false)}
+                        >
+                            <Text style={{ color: colors.textSecondary, fontSize: 16, fontWeight: '600' }}>Cancelar</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
 
             <MenuInferior />
         </SafeAreaView>
