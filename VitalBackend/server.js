@@ -1,4 +1,5 @@
 const express = require('express');
+const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const cors = require('cors');
@@ -8,12 +9,26 @@ const helmet = require('helmet');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
+const cookieParser = require('cookie-parser');
 const { pool, testConnection } = require('./db');
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Permite usar cookies Secure detrás de proxies (por ejemplo, Heroku o NGROK)
+app.set('trust proxy', 1);
+
+const COOKIE_OPTIONS = {
+    httpOnly: true,
+    secure: false,       // false para desarrollo HTTP (cambiar a true en producción HTTPS)
+    sameSite: 'strict',
+};
+
+function setSecureCookie(res, name, value, options = {}) {
+    return res.cookie(name, value, { ...COOKIE_OPTIONS, ...options });
+}
 
 // Middleware
 app.use(helmet({
@@ -29,7 +44,8 @@ app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
 app.use(cors({
-    origin: '*',
+    origin: ['http://localhost:8081', 'http://127.0.0.1:8081'],
+    credentials: true,  // Permite enviar/recibir cookies entre orígenes
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'X-Signature'],
 }));
@@ -37,6 +53,55 @@ app.use(cors({
 app.options('/{*path}', cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser()); // Necesario para leer y escribir cookies
+
+// ============================================
+// SESIONES EN MEMORIA (como en el ejemplo de clase)
+// ============================================
+const sessions = {};
+
+const createSession = function(req, res, extraData = {}) {
+    const userAgent = req.get('user-agent');
+    const sessionId = crypto.randomBytes(16).toString('base64url');
+    sessions[sessionId] = { userAgent, ...extraData };
+    res.cookie('sessionId', sessionId, COOKIE_OPTIONS);
+    console.log(' Sesión creada:', sessionId);
+    return sessionId;
+};
+
+// ============================================
+// PREVENCIÓN DE INYECCIONES (SQL + XSS)
+// ============================================
+
+// SQL Injection: PREVENIDA por queries parametrizadas con "?" en todo el backend.
+// mysql2 nunca interpola valores directamente en el SQL — los envía como parámetros separados.
+
+// XSS (JavaScript Injection): Escapar caracteres peligrosos en inputs del usuario.
+function sanitizeInput(value) {
+    if (typeof value !== 'string') return value;
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;')
+        .replace(/\//g, '&#x2F;')
+        .trim();
+}
+
+// Middleware global: sanitiza automáticamente todos los campos del body
+function sanitizeMiddleware(req, res, next) {
+    if (req.body && typeof req.body === 'object') {
+        for (const key in req.body) {
+            if (typeof req.body[key] === 'string') {
+                req.body[key] = sanitizeInput(req.body[key]);
+            }
+        }
+    }
+    next();
+}
+
+app.use(sanitizeMiddleware);
 
 // ============================================
 // MIDDLEWARE: VERIFICACIÓN DE INTEGRIDAD HMAC SHA-256
@@ -88,11 +153,11 @@ testConnection();
 // Inicializar DB (Añadir columnas MFA si no existen)
 async function initDB() {
     try {
-        await pool.query('ALTER TABLE usuarios ADD COLUMN mfa_secret VARCHAR(255) DEFAULT NULL');
+        await pool.query('ALTER TABLE usuario ADD COLUMN mfa_secret VARCHAR(255) DEFAULT NULL');
         console.log(' Columna mfa_secret añadida a usuarios');
     } catch (e) { /* Ya existe */ }
     try {
-        await pool.query('ALTER TABLE usuarios ADD COLUMN mfa_enabled BOOLEAN DEFAULT FALSE');
+        await pool.query('ALTER TABLE usuario ADD COLUMN mfa_enabled BOOLEAN DEFAULT FALSE');
         console.log(' Columna mfa_enabled añadida a usuarios');
     } catch (e) { /* Ya existe */ }
 }
@@ -125,7 +190,7 @@ app.post('/api/login', async (req, res) => {
         const [rows] = await pool.query(
             `SELECT id_usuario, nombre, email, edad, rol, nivel_actividad,
                     condiciones_medicas, restricciones, password_hash, mfa_enabled
-             FROM usuarios
+             FROM usuario
              WHERE email = ? AND cuenta_activa = 1`,
             [email]
         );
@@ -150,10 +215,17 @@ app.post('/api/login', async (req, res) => {
 
         if (usuario.mfa_enabled) {
             console.log(' Login requiere MFA para:', email);
+            createSession(req, res, { userId: usuario.id_usuario });
             return res.json({ success: true, requiresMfa: true, userId: usuario.id_usuario });
         }
 
-        console.log(' Login exitoso para:', email);
+        // Crear sesión con datos del usuario (igual que el ejemplo de clase)
+        const sessionId = createSession(req, res, {
+            userId: usuarioSinHash.id_usuario,
+            email: usuarioSinHash.email,
+            rol: usuarioSinHash.rol
+        });
+        console.log(' Login exitoso para:', email, '| sessionId:', sessionId);
         res.json({ success: true, user: usuarioSinHash });
 
     } catch (error) {
@@ -173,7 +245,7 @@ app.post('/api/mfa/setup', async (req, res) => {
     try {
         const secret = speakeasy.generateSecret({ name: `VitalApp (${userId})` });
 
-        await pool.query('UPDATE usuarios SET mfa_secret = ? WHERE id_usuario = ?', [secret.base32, userId]);
+        await pool.query('UPDATE usuario SET mfa_secret = ? WHERE id_usuario = ?', [secret.base32, userId]);
 
         QRCode.toDataURL(secret.otpauth_url, (err, data_url) => {
             if (err) return res.status(500).json({ success: false, message: 'Error al generar QR' });
@@ -190,7 +262,7 @@ app.post('/api/mfa/enable', async (req, res) => {
     if (!userId || !token) return res.status(400).json({ success: false, message: 'Faltan datos' });
 
     try {
-        const [rows] = await pool.query('SELECT mfa_secret FROM usuarios WHERE id_usuario = ?', [userId]);
+        const [rows] = await pool.query('SELECT mfa_secret FROM usuario WHERE id_usuario = ?', [userId]);
         if (rows.length === 0 || !rows[0].mfa_secret) {
             return res.json({ success: false, message: 'MFA no configurado' });
         }
@@ -202,7 +274,7 @@ app.post('/api/mfa/enable', async (req, res) => {
         });
 
         if (verified) {
-            await pool.query('UPDATE usuarios SET mfa_enabled = 1 WHERE id_usuario = ?', [userId]);
+            await pool.query('UPDATE usuario SET mfa_enabled = 1 WHERE id_usuario = ?', [userId]);
             res.json({ success: true, message: 'MFA habilitado correctamente' });
         } else {
             res.json({ success: false, message: 'Token incorrecto' });
@@ -219,7 +291,7 @@ app.post('/api/mfa/verify-login', async (req, res) => {
         const [rows] = await pool.query(
             `SELECT id_usuario, nombre, email, edad, rol, nivel_actividad,
                     condiciones_medicas, restricciones, mfa_secret, mfa_enabled
-             FROM usuarios
+             FROM usuario
              WHERE id_usuario = ? AND cuenta_activa = 1`,
             [userId]
         );
@@ -257,7 +329,7 @@ app.post('/api/mfa/disable', async (req, res) => {
     if (!userId) return res.status(400).json({ success: false, message: 'Faltan datos' });
 
     try {
-        await pool.query('UPDATE usuarios SET mfa_enabled = 0, mfa_secret = NULL WHERE id_usuario = ?', [userId]);
+        await pool.query('UPDATE usuario SET mfa_enabled = 0, mfa_secret = NULL WHERE id_usuario = ?', [userId]);
         console.log(' MFA Deshabilitado para ID:', userId);
         res.json({ success: true, message: 'MFA deshabilitado correctamente' });
     } catch (e) {
@@ -284,7 +356,7 @@ app.post('/api/register', async (req, res) => {
     try {
         // Verificar si el email ya existe
         const [existing] = await pool.query(
-            'SELECT id_usuario FROM usuarios WHERE email = ?',
+            'SELECT id_usuario FROM usuario WHERE email = ?',
             [email]
         );
 
@@ -297,13 +369,15 @@ app.post('/api/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password_hash, salt);
 
         const [result] = await pool.query(
-            `INSERT INTO usuarios
+            `INSERT INTO usuario
                 (nombre, email, password_hash, fecha_nacimiento, peso, altura, genero, telefono)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [nombre, email, hashedPassword, fecha_nacimiento, peso, altura ?? null, genero ?? null, telefono ?? null]
         );
 
         console.log(' Usuario registrado ID:', result.insertId);
+        setSecureCookie(res, 'userId', String(result.insertId));
+        setSecureCookie(res, 'userRol', 'usuario');
         res.json({ success: true, id: result.insertId, message: 'Registro exitoso' });
 
     } catch (error) {
@@ -322,7 +396,7 @@ app.get('/api/user/:id', async (req, res) => {
             `SELECT id_usuario, nombre, email, edad, peso, altura, genero,
                     telefono, fecha_registro, nivel_actividad,
                     condiciones_medicas, restricciones, rol, mfa_enabled
-             FROM usuarios
+             FROM usuario
              WHERE id_usuario = ? AND cuenta_activa = 1`,
             [id]
         );
@@ -348,7 +422,7 @@ app.put('/api/user/:id', async (req, res) => {
 
     try {
         const [result] = await pool.query(
-            `UPDATE usuarios
+            `UPDATE usuario
              SET nombre = ?, email = ?, peso = ?, altura = ?, genero = ?,
                  telefono = ?, nivel_actividad = ?, condiciones_medicas = ?, restricciones = ?
              WHERE id_usuario = ?`,
@@ -397,7 +471,7 @@ app.get('/api/exercises/user/:id', async (req, res) => {
     const { id } = req.params;
     try {
         const [users] = await pool.query(
-            'SELECT edad, peso FROM usuarios WHERE id_usuario = ? AND cuenta_activa = 1',
+            'SELECT edad, peso FROM usuario WHERE id_usuario = ? AND cuenta_activa = 1',
             [id]
         );
 
@@ -754,7 +828,7 @@ app.get('/api/admin/usuarios', async (req, res) => {
             `SELECT id_usuario, nombre, fecha_nacimiento, edad, peso, altura,
                     genero, email, rol, cuenta_activa, telefono, fecha_registro,
                     nivel_actividad, condiciones_medicas, restricciones
-             FROM usuarios
+             FROM usuario
              ORDER BY id_usuario ASC`
         );
         res.json({ success: true, usuarios: rows });
@@ -771,7 +845,7 @@ app.put('/api/admin/usuarios/:id', async (req, res) => {
         cuenta_activa, nivel_actividad, condiciones_medicas, restricciones } = req.body;
     try {
         const [result] = await pool.query(
-            `UPDATE usuarios SET
+            `UPDATE usuario SET
                 nombre = ?, email = ?, peso = ?, altura = ?, genero = ?,
                 telefono = ?, rol = ?, cuenta_activa = ?,
                 nivel_actividad = ?, condiciones_medicas = ?, restricciones = ?
@@ -797,7 +871,7 @@ app.delete('/api/admin/usuarios/:id', async (req, res) => {
     const { id } = req.params;
     console.log('  DELETE usuario ID:', id);
     try {
-        const [result] = await pool.query('DELETE FROM usuarios WHERE id_usuario = ?', [id]);
+        const [result] = await pool.query('DELETE FROM usuario WHERE id_usuario = ?', [id]);
         console.log('Filas afectadas:', result.affectedRows);
         if (result.affectedRows > 0) {
             res.json({ success: true, message: 'Usuario eliminado correctamente' });
@@ -1028,7 +1102,7 @@ app.get('/api/admin/usuarios', async (req, res) => {
             `SELECT id_usuario, nombre, email, edad, peso, altura, genero,
                     telefono, rol, cuenta_activa, fecha_registro,
                     nivel_actividad, condiciones_medicas, restricciones
-             FROM usuarios ORDER BY id_usuario ASC`
+             FROM usuario ORDER BY id_usuario ASC`
         );
         res.json({ success: true, usuarios: rows });
     } catch (error) {
@@ -1045,7 +1119,7 @@ app.put('/api/admin/usuarios/:id', async (req, res) => {
         condiciones_medicas, restricciones } = req.body;
     try {
         const [result] = await pool.query(
-            `UPDATE usuarios SET
+            `UPDATE usuario SET
                 nombre = ?, email = ?, peso = ?, altura = ?, genero = ?,
                 telefono = ?, rol = ?, cuenta_activa = ?, nivel_actividad = ?,
                 condiciones_medicas = ?, restricciones = ?
@@ -1092,15 +1166,32 @@ const sslOptions = {
     cert: fs.readFileSync('./cert.pem')
 };
 
-https.createServer(sslOptions, app).listen(PORT, '0.0.0.0', () => {
-    console.log(` Servidor HTTPS corriendo en puerto ${PORT}`);
-    console.log(` Local:  https://localhost:${PORT}`);
-    console.log(` Red:    https://192.168.100.14:${PORT}`);
-    console.log(` Login:          POST /api/login`);
-    console.log(` Registro:       POST /api/register`);
-    console.log(` Ejercicios:      GET /api/exercises`);
-    console.log(` Ejerc. usuario:  GET /api/exercises/user/:id`);
-    console.log(`  Registrar ej.:  POST /api/ejercicio-realizado`);
-    console.log(` Evolución:       GET /api/evolucion/:id_usuario`);
-    console.log(` Reporte:         GET /api/reporte/:id_usuario`);
-});
+const isProduction = process.env.NODE_ENV === 'production';
+
+if (isProduction) {
+    https.createServer(sslOptions, app).listen(PORT, '0.0.0.0', () => {
+        console.log(` Servidor HTTPS corriendo en puerto ${PORT}`);
+        console.log(` Local:  https://localhost:${PORT}`);
+        console.log(` Red:    https://192.168.100.14:${PORT}`);
+        console.log(` Login:          POST /api/login`);
+        console.log(` Registro:       POST /api/register`);
+        console.log(` Ejercicios:      GET /api/exercises`);
+        console.log(` Ejerc. usuario:  GET /api/exercises/user/:id`);
+        console.log(`  Registrar ej.:  POST /api/ejercicio-realizado`);
+        console.log(` Evolución:       GET /api/evolucion/:id_usuario`);
+        console.log(` Reporte:         GET /api/reporte/:id_usuario`);
+    });
+} else {
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(` Servidor HTTP corriendo en puerto ${PORT}`);
+        console.log(` Local:  http://localhost:${PORT}`);
+        console.log(` Red:    http://192.168.100.14:${PORT}`);
+        console.log(` Login:          POST /api/login`);
+        console.log(` Registro:       POST /api/register`);
+        console.log(` Ejercicios:      GET /api/exercises`);
+        console.log(` Ejerc. usuario:  GET /api/exercises/user/:id`);
+        console.log(`  Registrar ej.:  POST /api/ejercicio-realizado`);
+        console.log(` Evolución:       GET /api/evolucion/:id_usuario`);
+        console.log(` Reporte:         GET /api/reporte/:id_usuario`);
+    });
+}
