@@ -13,7 +13,9 @@ const jwt = require('jsonwebtoken');
 const { pool, testConnection } = require('./db');
 
 const GOOGLE_CLIENT_ID = '691441001085-m589115m0oplaunqp33l74jkpc6j3vf0.apps.googleusercontent.com';
+const { OAuth2Client } = require('google-auth-library');
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+const cookieParser = require('cookie-parser');
 
 dotenv.config();
 
@@ -46,6 +48,12 @@ app.use(helmet({
     },
     crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
+
+// Set Permissions-Policy header
+app.use((req, res, next) => {
+    res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=()');
+    next();
+});
 app.use(cors({
     origin: ['http://localhost:8081', 'http://127.0.0.1:8081'],
     credentials: true,  // Permite enviar/recibir cookies entre orígenes
