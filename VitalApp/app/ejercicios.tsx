@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../constants/config';
+import { fetchSeguro } from '../utils/api';
 import MenuInferior from '../components/MenuInferior';
 import { useTheme } from '../hooks/useTheme';
 import { getVideoIdForExercise } from '../constants/exercises';
@@ -85,7 +86,7 @@ export default function EjerciciosScreen() {
 
     const cargarEjercicios = async () => {
         try {
-            const response = await fetch(`${API_URL}/exercises`);
+            const response = await fetchSeguro(`${API_URL}/exercises`);
             const data = await response.json();
 
             // Map the backend data structure to match the frontend Ejercicio interface

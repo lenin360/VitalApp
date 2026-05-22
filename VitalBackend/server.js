@@ -1,10 +1,13 @@
 const express = require('express');
+const https = require('https');
+const fs = require('fs');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const bcrypt = require('bcryptjs');
 const helmet = require('helmet');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
+const crypto = require('crypto');
 const { pool, testConnection } = require('./db');
 
 dotenv.config();
@@ -28,12 +31,56 @@ app.use(helmet({
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'X-Signature'],
 }));
 // Responder preflight OPTIONS globalmente (Express 5 / path-to-regexp v8)
 app.options('/{*path}', cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// ============================================
+// MIDDLEWARE: VERIFICACIÓN DE INTEGRIDAD HMAC SHA-256
+// ============================================
+const HMAC_SECRET = process.env.HMAC_SECRET;
+
+function verificarFirma(req, res, next) {
+    // Solo verificar en métodos que envían cuerpo
+    if (!['POST', 'PUT', 'DELETE'].includes(req.method)) return next();
+
+    const firma = req.headers['x-signature'];
+
+    if (!firma) {
+        return res.status(400).json({
+            success: false,
+            message: 'Firma de seguridad ausente (X-Signature). Solicitud rechazada.'
+        });
+    }
+
+    if (!HMAC_SECRET) {
+        console.warn('[ADVERTENCIA] HMAC_SECRET no definida en .env. Saltando verificación.');
+        return next();
+    }
+
+    // Calcular HMAC del cuerpo recibido
+    const cuerpo = JSON.stringify(req.body);
+    const firmaEsperada = crypto
+        .createHmac('sha256', HMAC_SECRET)
+        .update(cuerpo)
+        .digest('hex');
+
+    if (firma !== firmaEsperada) {
+        console.warn('🚫 Firma inválida en:', req.path, '| recibida:', firma, '| esperada:', firmaEsperada);
+        return res.status(400).json({
+            success: false,
+            message: 'Firma inválida. Los datos pueden haber sido manipulados.'
+        });
+    }
+
+    next();
+}
+
+// Aplicar verificación de integridad a todas las rutas /api/*
+app.use('/api', verificarFirma);
 
 // Probar conexión
 testConnection();
@@ -41,12 +88,12 @@ testConnection();
 // Inicializar DB (Añadir columnas MFA si no existen)
 async function initDB() {
     try {
-        await pool.query('ALTER TABLE usuario ADD COLUMN mfa_secret VARCHAR(255) DEFAULT NULL');
-        console.log(' Columna mfa_secret añadida a usuario');
+        await pool.query('ALTER TABLE usuarios ADD COLUMN mfa_secret VARCHAR(255) DEFAULT NULL');
+        console.log(' Columna mfa_secret añadida a usuarios');
     } catch (e) { /* Ya existe */ }
     try {
-        await pool.query('ALTER TABLE usuario ADD COLUMN mfa_enabled BOOLEAN DEFAULT FALSE');
-        console.log(' Columna mfa_enabled añadida a usuario');
+        await pool.query('ALTER TABLE usuarios ADD COLUMN mfa_enabled BOOLEAN DEFAULT FALSE');
+        console.log(' Columna mfa_enabled añadida a usuarios');
     } catch (e) { /* Ya existe */ }
 }
 initDB();
@@ -78,7 +125,7 @@ app.post('/api/login', async (req, res) => {
         const [rows] = await pool.query(
             `SELECT id_usuario, nombre, email, edad, rol, nivel_actividad,
                     condiciones_medicas, restricciones, password_hash, mfa_enabled
-             FROM usuario
+             FROM usuarios
              WHERE email = ? AND cuenta_activa = 1`,
             [email]
         );
@@ -126,7 +173,7 @@ app.post('/api/mfa/setup', async (req, res) => {
     try {
         const secret = speakeasy.generateSecret({ name: `VitalApp (${userId})` });
 
-        await pool.query('UPDATE usuario SET mfa_secret = ? WHERE id_usuario = ?', [secret.base32, userId]);
+        await pool.query('UPDATE usuarios SET mfa_secret = ? WHERE id_usuario = ?', [secret.base32, userId]);
 
         QRCode.toDataURL(secret.otpauth_url, (err, data_url) => {
             if (err) return res.status(500).json({ success: false, message: 'Error al generar QR' });
@@ -143,7 +190,7 @@ app.post('/api/mfa/enable', async (req, res) => {
     if (!userId || !token) return res.status(400).json({ success: false, message: 'Faltan datos' });
 
     try {
-        const [rows] = await pool.query('SELECT mfa_secret FROM usuario WHERE id_usuario = ?', [userId]);
+        const [rows] = await pool.query('SELECT mfa_secret FROM usuarios WHERE id_usuario = ?', [userId]);
         if (rows.length === 0 || !rows[0].mfa_secret) {
             return res.json({ success: false, message: 'MFA no configurado' });
         }
@@ -155,7 +202,7 @@ app.post('/api/mfa/enable', async (req, res) => {
         });
 
         if (verified) {
-            await pool.query('UPDATE usuario SET mfa_enabled = 1 WHERE id_usuario = ?', [userId]);
+            await pool.query('UPDATE usuarios SET mfa_enabled = 1 WHERE id_usuario = ?', [userId]);
             res.json({ success: true, message: 'MFA habilitado correctamente' });
         } else {
             res.json({ success: false, message: 'Token incorrecto' });
@@ -172,7 +219,7 @@ app.post('/api/mfa/verify-login', async (req, res) => {
         const [rows] = await pool.query(
             `SELECT id_usuario, nombre, email, edad, rol, nivel_actividad,
                     condiciones_medicas, restricciones, mfa_secret, mfa_enabled
-             FROM usuario
+             FROM usuarios
              WHERE id_usuario = ? AND cuenta_activa = 1`,
             [userId]
         );
@@ -210,7 +257,7 @@ app.post('/api/mfa/disable', async (req, res) => {
     if (!userId) return res.status(400).json({ success: false, message: 'Faltan datos' });
 
     try {
-        await pool.query('UPDATE usuario SET mfa_enabled = 0, mfa_secret = NULL WHERE id_usuario = ?', [userId]);
+        await pool.query('UPDATE usuarios SET mfa_enabled = 0, mfa_secret = NULL WHERE id_usuario = ?', [userId]);
         console.log(' MFA Deshabilitado para ID:', userId);
         res.json({ success: true, message: 'MFA deshabilitado correctamente' });
     } catch (e) {
@@ -237,7 +284,7 @@ app.post('/api/register', async (req, res) => {
     try {
         // Verificar si el email ya existe
         const [existing] = await pool.query(
-            'SELECT id_usuario FROM usuario WHERE email = ?',
+            'SELECT id_usuario FROM usuarios WHERE email = ?',
             [email]
         );
 
@@ -250,7 +297,7 @@ app.post('/api/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password_hash, salt);
 
         const [result] = await pool.query(
-            `INSERT INTO usuario
+            `INSERT INTO usuarios
                 (nombre, email, password_hash, fecha_nacimiento, peso, altura, genero, telefono)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [nombre, email, hashedPassword, fecha_nacimiento, peso, altura ?? null, genero ?? null, telefono ?? null]
@@ -275,7 +322,7 @@ app.get('/api/user/:id', async (req, res) => {
             `SELECT id_usuario, nombre, email, edad, peso, altura, genero,
                     telefono, fecha_registro, nivel_actividad,
                     condiciones_medicas, restricciones, rol, mfa_enabled
-             FROM usuario
+             FROM usuarios
              WHERE id_usuario = ? AND cuenta_activa = 1`,
             [id]
         );
@@ -301,7 +348,7 @@ app.put('/api/user/:id', async (req, res) => {
 
     try {
         const [result] = await pool.query(
-            `UPDATE usuario
+            `UPDATE usuarios
              SET nombre = ?, email = ?, peso = ?, altura = ?, genero = ?,
                  telefono = ?, nivel_actividad = ?, condiciones_medicas = ?, restricciones = ?
              WHERE id_usuario = ?`,
@@ -350,7 +397,7 @@ app.get('/api/exercises/user/:id', async (req, res) => {
     const { id } = req.params;
     try {
         const [users] = await pool.query(
-            'SELECT edad, peso FROM usuario WHERE id_usuario = ? AND cuenta_activa = 1',
+            'SELECT edad, peso FROM usuarios WHERE id_usuario = ? AND cuenta_activa = 1',
             [id]
         );
 
@@ -707,7 +754,7 @@ app.get('/api/admin/usuarios', async (req, res) => {
             `SELECT id_usuario, nombre, fecha_nacimiento, edad, peso, altura,
                     genero, email, rol, cuenta_activa, telefono, fecha_registro,
                     nivel_actividad, condiciones_medicas, restricciones
-             FROM usuario
+             FROM usuarios
              ORDER BY id_usuario ASC`
         );
         res.json({ success: true, usuarios: rows });
@@ -724,7 +771,7 @@ app.put('/api/admin/usuarios/:id', async (req, res) => {
         cuenta_activa, nivel_actividad, condiciones_medicas, restricciones } = req.body;
     try {
         const [result] = await pool.query(
-            `UPDATE usuario SET
+            `UPDATE usuarios SET
                 nombre = ?, email = ?, peso = ?, altura = ?, genero = ?,
                 telefono = ?, rol = ?, cuenta_activa = ?,
                 nivel_actividad = ?, condiciones_medicas = ?, restricciones = ?
@@ -750,7 +797,7 @@ app.delete('/api/admin/usuarios/:id', async (req, res) => {
     const { id } = req.params;
     console.log('  DELETE usuario ID:', id);
     try {
-        const [result] = await pool.query('DELETE FROM usuario WHERE id_usuario = ?', [id]);
+        const [result] = await pool.query('DELETE FROM usuarios WHERE id_usuario = ?', [id]);
         console.log('Filas afectadas:', result.affectedRows);
         if (result.affectedRows > 0) {
             res.json({ success: true, message: 'Usuario eliminado correctamente' });
@@ -981,7 +1028,7 @@ app.get('/api/admin/usuarios', async (req, res) => {
             `SELECT id_usuario, nombre, email, edad, peso, altura, genero,
                     telefono, rol, cuenta_activa, fecha_registro,
                     nivel_actividad, condiciones_medicas, restricciones
-             FROM usuario ORDER BY id_usuario ASC`
+             FROM usuarios ORDER BY id_usuario ASC`
         );
         res.json({ success: true, usuarios: rows });
     } catch (error) {
@@ -998,7 +1045,7 @@ app.put('/api/admin/usuarios/:id', async (req, res) => {
         condiciones_medicas, restricciones } = req.body;
     try {
         const [result] = await pool.query(
-            `UPDATE usuario SET
+            `UPDATE usuarios SET
                 nombre = ?, email = ?, peso = ?, altura = ?, genero = ?,
                 telefono = ?, rol = ?, cuenta_activa = ?, nivel_actividad = ?,
                 condiciones_medicas = ?, restricciones = ?
@@ -1038,12 +1085,17 @@ app.post('/api/admin/usuarios/eliminar/:id', async (req, res) => {
 });
 
 // ============================================
-// INICIAR SERVIDOR
+// INICIAR SERVIDOR (HTTPS)
 // ============================================
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(` Servidor corriendo en puerto ${PORT}`);
-    console.log(` Local:  http://localhost:${PORT}`);
-    console.log(` Red:    http://192.168.100.14:${PORT}`);
+const sslOptions = {
+    key: fs.readFileSync('./key.pem'),
+    cert: fs.readFileSync('./cert.pem')
+};
+
+https.createServer(sslOptions, app).listen(PORT, '0.0.0.0', () => {
+    console.log(` Servidor HTTPS corriendo en puerto ${PORT}`);
+    console.log(` Local:  https://localhost:${PORT}`);
+    console.log(` Red:    https://192.168.100.14:${PORT}`);
     console.log(` Login:          POST /api/login`);
     console.log(` Registro:       POST /api/register`);
     console.log(` Ejercicios:      GET /api/exercises`);

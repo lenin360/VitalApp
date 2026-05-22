@@ -35,7 +35,16 @@ export default function RootLayout() {
       }}
     >
       <Stack.Screen name="index" />
-      <Stack.Screen name="login" />
+      <Stack.Screen 
+        name="login" 
+        options={{
+          contentStyle: {
+            maxWidth: '100%',
+            width: '100%',
+            alignSelf: 'stretch',
+          }
+        }}
+      />
       <Stack.Screen name="home" />
       <Stack.Screen name="ejercicios" />
       <Stack.Screen name="estadisticas" />

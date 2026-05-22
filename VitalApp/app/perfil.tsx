@@ -21,7 +21,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MenuInferior from '../components/MenuInferior';
 import { API_URL } from '../constants/config';
+import { fetchSeguro } from '../utils/api';
 import { useTheme } from '../hooks/useTheme';
+
 
 export default function PerfilScreen() {
     const router = useRouter();
@@ -82,7 +84,7 @@ export default function PerfilScreen() {
 
             if (id) {
                 try {
-                    const response = await fetch(`${API_URL}/user/${id}`);
+                    const response = await fetchSeguro(`${API_URL}/user/${id}`);
                     const data = await response.json();
                     if (data.success && data.user) {
                         edadBackend = data.user.edad?.toString() || edadBackend;
@@ -137,7 +139,7 @@ export default function PerfilScreen() {
             // Intentar guardar en el backend
             if (usuario.id) {
                 try {
-                    const response = await fetch(`${API_URL}/user/${usuario.id}`, {
+                    const response = await fetchSeguro(`${API_URL}/user/${usuario.id}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -202,7 +204,7 @@ export default function PerfilScreen() {
         }
         setMfaLoading(true);
         try {
-            const response = await fetch(`${API_URL}/mfa/setup`, {
+            const response = await fetchSeguro(`${API_URL}/mfa/setup`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: usuario.id })
@@ -229,7 +231,7 @@ export default function PerfilScreen() {
         }
         setMfaLoading(true);
         try {
-            const response = await fetch(`${API_URL}/mfa/enable`, {
+            const response = await fetchSeguro(`${API_URL}/mfa/enable`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: usuario.id, token: mfaTokenInput })
@@ -276,7 +278,7 @@ export default function PerfilScreen() {
         setMfaLoading(true);
         console.log("Iniciando desactivación de MFA para ID:", usuario.id);
         try {
-            const response = await fetch(`${API_URL}/mfa/disable`, {
+            const response = await fetchSeguro(`${API_URL}/mfa/disable`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: usuario.id })

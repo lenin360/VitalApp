@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../constants/config';
+import { fetchSeguro } from '../utils/api';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -86,7 +87,7 @@ const api = async (path: string, method = 'GET', body?: object) => {
     if (method === 'POST' || method === 'PUT') {
         opts.body = JSON.stringify(body ?? {});
     }
-    const res = await fetch(url, opts);
+    const res = await fetchSeguro(url, opts);
     return res.json();
 };
 
