@@ -9,6 +9,10 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
+
+WebBrowser.maybeCompleteAuthSession();
 
 // Inyectar CSS global para quitar márgenes del navegador (solo web)
 if (Platform.OS === 'web' && typeof document !== 'undefined') {
@@ -305,6 +309,24 @@ export default function LoginScreen() {
     const [tempUserId, setTempUserId] = useState<number | null>(null);
     const router = useRouter();
 
+    // ── GOOGLE SSO HOOK ───────────────────────────────────────────────────────
+    const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+        clientId: '691441001085-m589115m0oplaunqp33l74jkpc6j3vf0.apps.googleusercontent.com',
+    });
+
+    useEffect(() => {
+        if (response?.type === 'success') {
+            const { id_token } = response.params;
+            if (id_token) {
+                handleRealGoogleOAuth(id_token);
+            } else {
+                Alert.alert('Error SSO', 'Google no devolvió el ID Token.');
+            }
+        } else if (response?.type === 'error') {
+            Alert.alert('Error SSO', 'No se pudo completar el inicio de sesión con Google.');
+        }
+    }, [response]);
+
     // ── LOGIN ─────────────────────────────────────────────────────────────────
     const handleLogin = async () => {
         if (!email || !password) {
@@ -411,6 +433,38 @@ export default function LoginScreen() {
         } finally {
             setCargando(false);
         }
+    };
+
+    // ── OAUTH2 (Google SSO REAL) ──────────────────────────────────────────────
+    const handleRealGoogleOAuth = async (idToken: string) => {
+        setCargando(true);
+        try {
+            const res = await fetchSeguro(`${API_URL}/auth/google`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: idToken }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                const u = data.user;
+                await AsyncStorage.setItem('userId', u.id_usuario.toString());
+                await AsyncStorage.setItem('userName', u.nombre || '');
+                await AsyncStorage.setItem('userEmail', u.email || '');
+                await AsyncStorage.setItem('userAge', (u.edad ?? '').toString());
+                await AsyncStorage.setItem('userRol', u.rol || 'usuario');
+                router.replace(u.rol === 'admin' ? '/admin' : '/home');
+            } else {
+                Alert.alert('Error SSO', data.message || 'No se pudo iniciar sesión con Google.');
+            }
+        } catch (e: any) {
+            Alert.alert('Error de conexión', e.message);
+        } finally {
+            setCargando(false);
+        }
+    };
+
+    const handleOAuthPress = () => {
+        promptAsync();
     };
 
     // ── PANTALLA ERROR ────────────────────────────────────────────────────────
@@ -574,6 +628,24 @@ export default function LoginScreen() {
                                             </Text>
                                         }
                                     </LinearGradient>
+                                </TouchableOpacity>
+
+                                {/* Divisor O */}
+                                <View style={st.dividerWrap}>
+                                    <View style={st.dividerLine} />
+                                    <Text style={st.dividerTxt}>O</Text>
+                                    <View style={st.dividerLine} />
+                                </View>
+
+                                {/* Botón SSO Real */}
+                                <TouchableOpacity
+                                    style={[st.btnOAuth, (!request || cargando) && { opacity: 0.6 }]}
+                                    onPress={handleOAuthPress}
+                                    disabled={!request || cargando}
+                                    activeOpacity={0.8}
+                                >
+                                    <Ionicons name="logo-google" size={20} color="#EA4335" style={{ marginRight: 10 }} />
+                                    <Text style={st.btnOAuthTxt}>Continuar con Google</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
@@ -817,4 +889,38 @@ const st = StyleSheet.create({
         fontWeight: '800',
         ...(isWeb ? { cursor: 'pointer' as any } : {})
     },
+    dividerWrap: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 18,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: 'rgba(150,180,255,0.15)'
+    },
+    dividerTxt: {
+        color: 'rgba(150,180,255,0.4)',
+        marginHorizontal: 12,
+        fontWeight: '600'
+    },
+    btnOAuth: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#FFFFFF',
+        height: isWeb ? 48 : 54,
+        borderRadius: 14,
+        marginBottom: 16,
+        ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 },
+            android: { elevation: 4 },
+            web: { boxShadow: '0 4px 12px rgba(0,0,0,0.15)', cursor: 'pointer' as any },
+        }),
+    },
+    btnOAuthTxt: {
+        fontSize: isWeb ? 16 : 18,
+        fontWeight: '700',
+        color: '#333333'
+    }
 });

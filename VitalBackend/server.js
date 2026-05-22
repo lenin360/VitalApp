@@ -10,7 +10,11 @@ const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
+const { OAuth2Client } = require('google-auth-library');
 const { pool, testConnection } = require('./db');
+
+const GOOGLE_CLIENT_ID = '691441001085-m589115m0oplaunqp33l74jkpc6j3vf0.apps.googleusercontent.com';
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 dotenv.config();
 
@@ -238,6 +242,76 @@ app.post('/api/login', async (req, res) => {
     } catch (error) {
         console.error(' Error en login:', error);
         res.status(500).json({ success: false, message: 'Error del servidor' });
+    }
+});
+
+// ============================================
+// OAUTH2 REAL (SSO Google)
+// ============================================
+app.post('/api/auth/google', async (req, res) => {
+    const { token } = req.body;
+    console.log(` OAUTH SSO Real - Verificando token de Google...`);
+
+    if (!token) {
+        return res.status(400).json({ success: false, message: 'Falta el token de Google' });
+    }
+
+    try {
+        // Verificar criptográficamente el token con Google
+        const ticket = await googleClient.verifyIdToken({
+            idToken: token,
+            audience: GOOGLE_CLIENT_ID,
+        });
+        
+        const payload = ticket.getPayload();
+        const email = payload.email;
+        const nombre = payload.name || 'Usuario Google';
+        
+        console.log(` Token válido. Email recibido de Google: ${email}`);
+
+        // Buscar si el usuario ya existe
+        const [rows] = await pool.query(
+            `SELECT id_usuario, nombre, email, edad, rol, nivel_actividad,
+                    condiciones_medicas, restricciones, password_hash, mfa_enabled
+             FROM usuario
+             WHERE email = ? AND cuenta_activa = 1`,
+            [email]
+        );
+
+        let usuario = rows[0];
+
+        // Si no existe, crearlo automáticamente (SSO Behavior)
+        if (!usuario) {
+            console.log(' Usuario nuevo vía Google SSO, creando cuenta:', email);
+            const dummyPassword = crypto.randomBytes(32).toString('hex');
+            const hash = await bcrypt.hash(dummyPassword, 10);
+            
+            const [result] = await pool.query(
+                `INSERT INTO usuario (nombre, email, password_hash, fecha_nacimiento, peso)
+                 VALUES (?, ?, ?, '2000-01-01', 70)`,
+                [nombre, email, hash]
+            );
+
+            // Obtener el usuario recién creado
+            const [newRows] = await pool.query('SELECT * FROM usuario WHERE id_usuario = ?', [result.insertId]);
+            usuario = newRows[0];
+        }
+
+        // Iniciar sesión y generar sessionId
+        const { password_hash: _, ...usuarioSinHash } = usuario;
+        
+        const sessionId = createSession(req, res, {
+            userId: usuarioSinHash.id_usuario,
+            email: usuarioSinHash.email,
+            rol: usuarioSinHash.rol
+        });
+        
+        console.log(` Login Google SSO exitoso para: ${email} | sessionId: ${sessionId}`);
+        res.json({ success: true, user: usuarioSinHash, message: 'Autenticación con Google exitosa' });
+
+    } catch (error) {
+        console.error(' Error verificando token de Google:', error);
+        res.status(401).json({ success: false, message: 'Token de Google inválido o expirado' });
     }
 });
 
