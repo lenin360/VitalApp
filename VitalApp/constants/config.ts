@@ -20,7 +20,7 @@ const getApiUrl = (): string => {
     return tunnelUrl;
   }
 
-  // ── 2. En Web, localhost funciona perfecto ─────────────────────────
+  // ── 2. En Web, localhost funciona mejor con HTTP en desarrollo ─────
   if (Platform.OS === 'web') {
     return 'http://localhost:5000/api';
   }

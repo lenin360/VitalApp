@@ -1,4 +1,5 @@
 const express = require('express');
+const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const cors = require('cors');
@@ -11,10 +12,26 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { pool, testConnection } = require('./db');
 
+const GOOGLE_CLIENT_ID = '691441001085-m589115m0oplaunqp33l74jkpc6j3vf0.apps.googleusercontent.com';
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Permite usar cookies Secure detrás de proxies (por ejemplo, Heroku o NGROK)
+app.set('trust proxy', 1);
+
+const COOKIE_OPTIONS = {
+    httpOnly: true,
+    secure: false,       // false para desarrollo HTTP (cambiar a true en producción HTTPS)
+    sameSite: 'strict',
+};
+
+function setSecureCookie(res, name, value, options = {}) {
+    return res.cookie(name, value, { ...COOKIE_OPTIONS, ...options });
+}
 
 // Middleware
 app.use(helmet({
@@ -30,7 +47,8 @@ app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
 app.use(cors({
-    origin: '*',
+    origin: ['http://localhost:8081', 'http://127.0.0.1:8081'],
+    credentials: true,  // Permite enviar/recibir cookies entre orígenes
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'X-Signature', 'X-CSRF-Token'],
 }));
@@ -38,6 +56,62 @@ app.use(cors({
 app.options('/{*path}', cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser()); // Necesario para leer y escribir cookies
+
+// ============================================
+// SESIONES EN MEMORIA (como en el ejemplo de clase)
+// ============================================
+const sessions = {};
+
+const createSession = function(req, res, extraData = {}) {
+    const userAgent = req.get('user-agent');
+    const sessionId = crypto.randomBytes(16).toString('base64url');
+    sessions[sessionId] = { userAgent, ...extraData };
+    res.cookie('sessionId', sessionId, COOKIE_OPTIONS);
+    console.log(' Sesión creada:', sessionId);
+    return sessionId;
+};
+
+// ============================================
+// PREVENCIÓN DE INYECCIONES (SQL + XSS)
+// ============================================
+
+// SQL Injection: PREVENIDA por queries parametrizadas con "?" en todo el backend.
+// mysql2 nunca interpola valores directamente en el SQL — los envía como parámetros separados.
+
+// XSS (JavaScript Injection): Escapar caracteres peligrosos en inputs del usuario.
+function sanitizeInput(value) {
+    if (typeof value !== 'string') return value;
+    const sanitized = value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;')
+        .replace(/\//g, '&#x2F;')
+        .trim();
+        
+    // Si el texto cambió, significa que tenía caracteres peligrosos
+    if (sanitized !== value.trim()) {
+        console.warn(`[ADVERTENCIA] [ALERTA DE SEGURIDAD] Se detectaron y neutralizaron caracteres peligrosos. Entrada original contenía inyección.`);
+    }
+    
+    return sanitized;
+}
+
+// Middleware global: sanitiza automáticamente todos los campos del body
+function sanitizeMiddleware(req, res, next) {
+    if (req.body && typeof req.body === 'object') {
+        for (const key in req.body) {
+            if (typeof req.body[key] === 'string') {
+                req.body[key] = sanitizeInput(req.body[key]);
+            }
+        }
+    }
+    next();
+}
+
+app.use(sanitizeMiddleware);
 
 // ============================================
 // MIDDLEWARE: VERIFICACIÓN DE INTEGRIDAD HMAC SHA-256
@@ -208,6 +282,7 @@ app.post('/api/login', async (req, res) => {
 
         if (usuario.mfa_enabled) {
             console.log(' Login requiere MFA para:', email);
+            createSession(req, res, { userId: usuario.id_usuario });
             return res.json({ success: true, requiresMfa: true, userId: usuario.id_usuario });
         }
 
@@ -218,6 +293,76 @@ app.post('/api/login', async (req, res) => {
     } catch (error) {
         console.error(' Error en login:', error);
         res.status(500).json({ success: false, message: 'Error del servidor' });
+    }
+});
+
+// ============================================
+// OAUTH2 REAL (SSO Google)
+// ============================================
+app.post('/api/auth/google', async (req, res) => {
+    const { token } = req.body;
+    console.log(` OAUTH SSO Real - Verificando token de Google...`);
+
+    if (!token) {
+        return res.status(400).json({ success: false, message: 'Falta el token de Google' });
+    }
+
+    try {
+        // Verificar criptográficamente el token con Google
+        const ticket = await googleClient.verifyIdToken({
+            idToken: token,
+            audience: GOOGLE_CLIENT_ID,
+        });
+        
+        const payload = ticket.getPayload();
+        const email = payload.email;
+        const nombre = payload.name || 'Usuario Google';
+        
+        console.log(` Token válido. Email recibido de Google: ${email}`);
+
+        // Buscar si el usuario ya existe
+        const [rows] = await pool.query(
+            `SELECT id_usuario, nombre, email, edad, rol, nivel_actividad,
+                    condiciones_medicas, restricciones, password_hash, mfa_enabled
+             FROM usuario
+             WHERE email = ? AND cuenta_activa = 1`,
+            [email]
+        );
+
+        let usuario = rows[0];
+
+        // Si no existe, crearlo automáticamente (SSO Behavior)
+        if (!usuario) {
+            console.log(' Usuario nuevo vía Google SSO, creando cuenta:', email);
+            const dummyPassword = crypto.randomBytes(32).toString('hex');
+            const hash = await bcrypt.hash(dummyPassword, 10);
+            
+            const [result] = await pool.query(
+                `INSERT INTO usuario (nombre, email, password_hash, fecha_nacimiento, peso)
+                 VALUES (?, ?, ?, '2000-01-01', 70)`,
+                [nombre, email, hash]
+            );
+
+            // Obtener el usuario recién creado
+            const [newRows] = await pool.query('SELECT * FROM usuario WHERE id_usuario = ?', [result.insertId]);
+            usuario = newRows[0];
+        }
+
+        // Iniciar sesión y generar sessionId
+        const { password_hash: _, ...usuarioSinHash } = usuario;
+        
+        const sessionId = createSession(req, res, {
+            userId: usuarioSinHash.id_usuario,
+            email: usuarioSinHash.email,
+            rol: usuarioSinHash.rol
+        });
+        
+        console.log(` Login Google SSO exitoso para: ${email} | sessionId: ${sessionId}`);
+        res.json({ success: true, user: usuarioSinHash, message: 'Autenticación con Google exitosa' });
+
+    } catch (error) {
+        console.error(' Error verificando token de Google:', error);
+        res.status(401).json({ success: false, message: 'Token de Google inválido o expirado' });
     }
 });
 
@@ -364,6 +509,8 @@ app.post('/api/register', async (req, res) => {
         );
 
         console.log(' Usuario registrado ID:', result.insertId);
+        setSecureCookie(res, 'userId', String(result.insertId));
+        setSecureCookie(res, 'userRol', 'usuario');
         res.json({ success: true, id: result.insertId, message: 'Registro exitoso' });
 
     } catch (error) {

@@ -90,6 +90,7 @@ export async function fetchSeguro(url: string, options: RequestInit = {}): Promi
 
     const response = await fetch(url, {
         ...options,
+        credentials: 'include', // Envía y recibe cookies en peticiones cross-origin
         headers,
     });
     
