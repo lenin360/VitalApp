@@ -384,6 +384,8 @@ export default function HomeScreen() {
         AsyncStorage.removeItem('userStats'),
         AsyncStorage.removeItem('completadosHoy'),
         AsyncStorage.removeItem('userHydration'),
+        AsyncStorage.removeItem('jwtToken'),
+        AsyncStorage.removeItem('csrfToken')
       ]);
       router.replace('/login');
     };

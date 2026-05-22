@@ -22,7 +22,7 @@ const getApiUrl = (): string => {
 
   // ── 2. En Web, localhost funciona perfecto ─────────────────────────
   if (Platform.OS === 'web') {
-    return 'https://localhost:5000/api';
+    return 'http://localhost:5000/api';
   }
 
   // ── 3. En celular: detectar IP del servidor automáticamente ────────
@@ -35,7 +35,7 @@ const getApiUrl = (): string => {
 
     if (debuggerHost) {
       const ip = debuggerHost.split(':')[0];
-      const url = `https://${ip}:5000/api`;
+      const url = `http://${ip}:5000/api`;
       console.log('📡 Usando IP automática del servidor:', url);
       return url;
     }
@@ -45,7 +45,7 @@ const getApiUrl = (): string => {
 
   // ── 4. Fallback: localhost ─────────────────────────────────────────
   console.warn('⚠️  Usando localhost como fallback (puede no funcionar en celular)');
-  return 'https://localhost:5000/api';
+  return 'http://localhost:5000/api';
 };
 
 export const API_URL = getApiUrl();

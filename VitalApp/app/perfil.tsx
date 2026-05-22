@@ -190,6 +190,8 @@ export default function PerfilScreen() {
                     onPress: async () => {
                         await AsyncStorage.removeItem('userId');
                         await AsyncStorage.removeItem('userSession');
+                        await AsyncStorage.removeItem('jwtToken');
+                        await AsyncStorage.removeItem('csrfToken');
                         router.replace('/login');
                     }
                 }
