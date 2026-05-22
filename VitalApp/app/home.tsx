@@ -11,6 +11,7 @@ import MenuInferior from '../components/MenuInferior';
 import { useTheme } from '../hooks/useTheme';
 import { getVideoIdForExercise, DAILY_TIPS } from '../constants/exercises';
 import { API_URL } from '../constants/config';
+import { fetchSeguro } from '../utils/api';
 
 
 export default function HomeScreen() {
@@ -73,7 +74,7 @@ export default function HomeScreen() {
       // Peso: se obtiene del backend con el id_usuario real
       if (userIdGuardado) {
         try {
-          const res = await fetch(`${API_URL}/user/${userIdGuardado}`);
+          const res = await fetchSeguro(`${API_URL}/user/${userIdGuardado}`);
           const data = await res.json();
           if (data.success && data.user?.peso) {
             setPeso(parseFloat(data.user.peso));
@@ -123,7 +124,7 @@ export default function HomeScreen() {
     // Sincronizar con la BD — tabla usuario, campo peso
     if (userId) {
       try {
-        await fetch(`${API_URL}/user/${userId}`, {
+        await fetchSeguro(`${API_URL}/user/${userId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ peso: nuevo })

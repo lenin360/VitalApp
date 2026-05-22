@@ -9,7 +9,36 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Inyectar CSS global para quitar márgenes del navegador (solo web)
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+    const styleId = 'vitalapp-login-fullscreen';
+    if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+            html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100% !important;
+                height: 100% !important;
+                overflow: hidden;
+                background-color: #03071E;
+            }
+            #root {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100% !important;
+                height: 100% !important;
+                display: flex;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+}
 import { API_URL } from '../constants/config';
+import { fetchSeguro } from '../utils/api';
+
 
 const isWeb = Platform.OS === 'web';
 const { width: SW, height: SH } = Dimensions.get('window');
@@ -284,7 +313,7 @@ export default function LoginScreen() {
         }
         setCargando(true);
         try {
-            const res = await fetch(`${API_URL}/login`, {
+            const res = await fetchSeguro(`${API_URL}/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                 body: JSON.stringify({ email, password_hash: password }),
@@ -321,7 +350,7 @@ export default function LoginScreen() {
         }
         setCargando(true);
         try {
-            const res = await fetch(`${API_URL}/mfa/verify-login`, {
+            const res = await fetchSeguro(`${API_URL}/mfa/verify-login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: tempUserId, token: mfaToken }),
@@ -357,7 +386,7 @@ export default function LoginScreen() {
         }
         setCargando(true);
         try {
-            const res = await fetch(`${API_URL}/register`, {
+            const res = await fetchSeguro(`${API_URL}/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -582,7 +611,16 @@ const st = StyleSheet.create({
         flex: 1,
         backgroundColor: '#03071E',
         overflow: 'hidden' as any,
-        ...(isWeb ? { height: '100vh' as any } : {}),
+        ...(isWeb ? {
+            position: 'fixed' as any,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100vw' as any,
+            height: '100vh' as any,
+            zIndex: 1,
+        } : {}),
     },
     centerFull: {
         flex: 1,

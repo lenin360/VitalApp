@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import MenuInferior from '../components/MenuInferior';
 import { useTheme } from '../hooks/useTheme';
 import { API_URL } from '../constants/config';
+import { fetchSeguro } from '../utils/api';
 
 const CONDITION_OPTIONS = [
   'Diabetes',
@@ -85,7 +86,7 @@ export default function EnfermedadesScreen() {
       await AsyncStorage.setItem('userConditions', JSON.stringify(condiciones));
       if (userId) {
         try {
-          await fetch(`${API_URL}/user/${userId}`, {
+          await fetchSeguro(`${API_URL}/user/${userId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ condiciones_medicas: condiciones.join(', ') })
