@@ -9,8 +9,7 @@ const helmet = require('helmet');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
-const cookieParser = require('cookie-parser');
-const { OAuth2Client } = require('google-auth-library');
+const jwt = require('jsonwebtoken');
 const { pool, testConnection } = require('./db');
 
 const GOOGLE_CLIENT_ID = '691441001085-m589115m0oplaunqp33l74jkpc6j3vf0.apps.googleusercontent.com';
@@ -51,7 +50,7 @@ app.use(cors({
     origin: ['http://localhost:8081', 'http://127.0.0.1:8081'],
     credentials: true,  // Permite enviar/recibir cookies entre orígenes
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'X-Signature'],
+    allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'X-Signature', 'X-CSRF-Token'],
 }));
 // Responder preflight OPTIONS globalmente (Express 5 / path-to-regexp v8)
 app.options('/{*path}', cors());
@@ -158,6 +157,63 @@ function verificarFirma(req, res, next) {
 // Aplicar verificación de integridad a todas las rutas /api/*
 app.use('/api', verificarFirma);
 
+// ============================================
+// SECURITY MIDDLEWARES: JWT & CSRF
+// ============================================
+const JWT_SECRET = process.env.JWT_SECRET || 'jwt_secret_fallback_123';
+const CSRF_SECRET = process.env.CSRF_SECRET || 'csrf_secret_fallback_456';
+
+const openRoutes = [
+    '/api/health',
+    '/api/login',
+    '/api/register',
+    '/api/mfa/setup',
+    '/api/mfa/enable',
+    '/api/mfa/verify-login',
+    '/api/mfa/disable',
+    '/api/csrf-token'
+];
+
+// 1. Validar JWT en rutas protegidas
+app.use((req, res, next) => {
+    if (!req.path.startsWith('/api/') || openRoutes.includes(req.path)) {
+        return next();
+    }
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.status(401).json({ success: false, message: 'Token JWT no proporcionado' });
+    const token = authHeader.split(' ')[1];
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (err) return res.status(403).json({ success: false, message: 'Token JWT inválido o expirado' });
+        req.user = decoded;
+        next();
+    });
+});
+
+// 2. Endpoint para obtener CSRF Token
+app.get('/api/csrf-token', (req, res) => {
+    const randomVal = crypto.randomBytes(32).toString('hex');
+    const hash = crypto.createHmac('sha256', CSRF_SECRET).update(randomVal).digest('hex');
+    res.json({ success: true, csrfToken: `${randomVal}.${hash}` });
+});
+
+// 3. Validar CSRF en peticiones que modifican estado (POST, PUT, DELETE)
+app.use((req, res, next) => {
+    if (!['POST', 'PUT', 'DELETE'].includes(req.method)) return next();
+    if (openRoutes.includes(req.path)) return next();
+    
+    const csrfToken = req.headers['x-csrf-token'];
+    if (!csrfToken || !csrfToken.includes('.')) {
+        return res.status(403).json({ success: false, message: 'Falta Token CSRF o es inválido' });
+    }
+    const [val, hash] = csrfToken.split('.');
+    const expectedHash = crypto.createHmac('sha256', CSRF_SECRET).update(val).digest('hex');
+    if (hash !== expectedHash) {
+        return res.status(403).json({ success: false, message: 'Token CSRF inválido' });
+    }
+    next();
+});
+
+
 // Probar conexión
 testConnection();
 
@@ -230,14 +286,9 @@ app.post('/api/login', async (req, res) => {
             return res.json({ success: true, requiresMfa: true, userId: usuario.id_usuario });
         }
 
-        // Crear sesión con datos del usuario (igual que el ejemplo de clase)
-        const sessionId = createSession(req, res, {
-            userId: usuarioSinHash.id_usuario,
-            email: usuarioSinHash.email,
-            rol: usuarioSinHash.rol
-        });
-        console.log(' Login exitoso para:', email, '| sessionId:', sessionId);
-        res.json({ success: true, user: usuarioSinHash });
+        const token = jwt.sign({ id: usuarioSinHash.id_usuario, email: usuarioSinHash.email, rol: usuarioSinHash.rol }, JWT_SECRET, { expiresIn: '7d' });
+        console.log(' Login exitoso para:', email);
+        res.json({ success: true, user: usuarioSinHash, token });
 
     } catch (error) {
         console.error(' Error en login:', error);
@@ -394,8 +445,9 @@ app.post('/api/mfa/verify-login', async (req, res) => {
 
         if (verified) {
             const { mfa_secret, ...usuarioLimpio } = usuario;
+            const token = jwt.sign({ id: usuarioLimpio.id_usuario, email: usuarioLimpio.email, rol: usuarioLimpio.rol }, JWT_SECRET, { expiresIn: '7d' });
             console.log(' MFA Login exitoso para ID:', userId);
-            res.json({ success: true, user: usuarioLimpio });
+            res.json({ success: true, user: usuarioLimpio, token });
         } else {
             res.json({ success: false, message: 'Código incorrecto' });
         }
@@ -1240,39 +1292,17 @@ app.post('/api/admin/usuarios/eliminar/:id', async (req, res) => {
 });
 
 // ============================================
-// INICIAR SERVIDOR (HTTPS)
+// INICIAR SERVIDOR (HTTP)
 // ============================================
-const sslOptions = {
-    key: fs.readFileSync('./key.pem'),
-    cert: fs.readFileSync('./cert.pem')
-};
-
-const isProduction = process.env.NODE_ENV === 'production';
-
-if (isProduction) {
-    https.createServer(sslOptions, app).listen(PORT, '0.0.0.0', () => {
-        console.log(` Servidor HTTPS corriendo en puerto ${PORT}`);
-        console.log(` Local:  https://localhost:${PORT}`);
-        console.log(` Red:    https://192.168.100.14:${PORT}`);
-        console.log(` Login:          POST /api/login`);
-        console.log(` Registro:       POST /api/register`);
-        console.log(` Ejercicios:      GET /api/exercises`);
-        console.log(` Ejerc. usuario:  GET /api/exercises/user/:id`);
-        console.log(`  Registrar ej.:  POST /api/ejercicio-realizado`);
-        console.log(` Evolución:       GET /api/evolucion/:id_usuario`);
-        console.log(` Reporte:         GET /api/reporte/:id_usuario`);
-    });
-} else {
-    app.listen(PORT, '0.0.0.0', () => {
-        console.log(` Servidor HTTP corriendo en puerto ${PORT}`);
-        console.log(` Local:  http://localhost:${PORT}`);
-        console.log(` Red:    http://192.168.100.14:${PORT}`);
-        console.log(` Login:          POST /api/login`);
-        console.log(` Registro:       POST /api/register`);
-        console.log(` Ejercicios:      GET /api/exercises`);
-        console.log(` Ejerc. usuario:  GET /api/exercises/user/:id`);
-        console.log(`  Registrar ej.:  POST /api/ejercicio-realizado`);
-        console.log(` Evolución:       GET /api/evolucion/:id_usuario`);
-        console.log(` Reporte:         GET /api/reporte/:id_usuario`);
-    });
-}
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(` Servidor HTTP corriendo en puerto ${PORT}`);
+    console.log(` Local:  http://localhost:${PORT}`);
+    console.log(` Red:    http://192.168.100.14:${PORT}`);
+    console.log(` Login:          POST /api/login`);
+    console.log(` Registro:       POST /api/register`);
+    console.log(` Ejercicios:      GET /api/exercises`);
+    console.log(` Ejerc. usuario:  GET /api/exercises/user/:id`);
+    console.log(`  Registrar ej.:  POST /api/ejercicio-realizado`);
+    console.log(` Evolución:       GET /api/evolucion/:id_usuario`);
+    console.log(` Reporte:         GET /api/reporte/:id_usuario`);
+});

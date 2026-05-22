@@ -405,6 +405,8 @@ export default function AdminScreen() {
                             AsyncStorage.removeItem('userAge'),
                             AsyncStorage.removeItem('userRol'),
                             AsyncStorage.removeItem('userWeight'),
+                            AsyncStorage.removeItem('jwtToken'),
+                            AsyncStorage.removeItem('csrfToken')
                         ]);
                         router.replace('/login');
                     }}

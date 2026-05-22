@@ -7,6 +7,7 @@
  * ║  POST, PUT y DELETE, garantizando la integridad de los datos.    ║
  * ╚══════════════════════════════════════════════════════════════════╝
  */
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Clave compartida con el backend (debe coincidir con HMAC_SECRET en .env)
 const HMAC_SECRET = 'VitalApp_HMAC_K3y_S3cur@2024!xZ9qPm';
@@ -49,7 +50,35 @@ export async function fetchSeguro(url: string, options: RequestInit = {}): Promi
         ...(options.headers as Record<string, string> || {}),
     };
 
+    // 1. Inyectar JWT
+    try {
+        const token = await AsyncStorage.getItem('jwtToken');
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+    } catch (e) {}
+
+    // 2. CSRF & HMAC
     if (necesitaFirma) {
+        // CSRF Token Check
+        try {
+            let csrf = await AsyncStorage.getItem('csrfToken');
+            if (!csrf) {
+                const baseUrl = url.substring(0, url.indexOf('/api')) + '/api';
+                const csrfRes = await fetch(`${baseUrl}/csrf-token`);
+                const csrfData = await csrfRes.json();
+                if (csrfData.success) {
+                    csrf = csrfData.csrfToken;
+                    await AsyncStorage.setItem('csrfToken', csrf!);
+                }
+            }
+            if (csrf) {
+                headers['X-CSRF-Token'] = csrf;
+            }
+        } catch (e) {
+            console.warn('⚠️ No se pudo obtener CSRF Token:', e);
+        }
+
         const cuerpo = options.body as string || '{}';
         try {
             const firma = await hmacSha256(HMAC_SECRET, cuerpo);
@@ -59,9 +88,22 @@ export async function fetchSeguro(url: string, options: RequestInit = {}): Promi
         }
     }
 
-    return fetch(url, {
+    const response = await fetch(url, {
         ...options,
         credentials: 'include', // Envía y recibe cookies en peticiones cross-origin
         headers,
     });
+    
+    // Si da error de CSRF (403), lo limpiamos para forzar su renovación
+    if (response.status === 403) {
+        try {
+            const clone = response.clone();
+            const data = await clone.json();
+            if (data.message && data.message.includes('CSRF')) {
+                await AsyncStorage.removeItem('csrfToken');
+            }
+        } catch (e) {}
+    }
+    
+    return response;
 }

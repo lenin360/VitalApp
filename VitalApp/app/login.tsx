@@ -353,6 +353,7 @@ export default function LoginScreen() {
                 await AsyncStorage.setItem('userEmail', u.email || '');
                 await AsyncStorage.setItem('userAge', (u.edad ?? '').toString());
                 await AsyncStorage.setItem('userRol', u.rol || 'usuario');
+                await AsyncStorage.setItem('jwtToken', data.token);
                 router.replace(u.rol === 'admin' ? '/admin' : '/home');
             } else {
                 setErrorLogin(true);
@@ -385,6 +386,7 @@ export default function LoginScreen() {
                 await AsyncStorage.setItem('userEmail', u.email || '');
                 await AsyncStorage.setItem('userAge', (u.edad ?? '').toString());
                 await AsyncStorage.setItem('userRol', u.rol || 'usuario');
+                await AsyncStorage.setItem('jwtToken', data.token);
                 router.replace(u.rol === 'admin' ? '/admin' : '/home');
             } else {
                 Alert.alert('Error', data.message || 'Código incorrecto.');
