@@ -14,6 +14,7 @@ const { pool, testConnection } = require('./db');
 
 const GOOGLE_CLIENT_ID = '691441001085-m589115m0oplaunqp33l74jkpc6j3vf0.apps.googleusercontent.com';
 const { OAuth2Client } = require('google-auth-library');
+const { encryptText, decryptText } = require('./utils/crypto');
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 const cookieParser = require('cookie-parser');
 
@@ -276,6 +277,10 @@ app.post('/api/login', async (req, res) => {
 
         const usuario = rows[0];
 
+        // Decrypt medical data
+        usuario.condiciones_medicas = decryptText(usuario.condiciones_medicas);
+        usuario.restricciones = decryptText(usuario.restricciones);
+
         // Comparar la contraseña ingresada contra el hash guardado en la BD
 
         const hashCompatible = usuario.password_hash.replace(/^\$2y\$/, '$2b$');
@@ -440,6 +445,10 @@ app.post('/api/mfa/verify-login', async (req, res) => {
 
         const usuario = rows[0];
 
+        // Decrypt medical data
+        usuario.condiciones_medicas = decryptText(usuario.condiciones_medicas);
+        usuario.restricciones = decryptText(usuario.restricciones);
+
         if (!usuario.mfa_enabled) {
             return res.json({ success: false, message: 'MFA no está habilitado para este usuario' });
         }
@@ -542,7 +551,10 @@ app.get('/api/user/:id', async (req, res) => {
             [id]
         );
         if (rows.length > 0) {
-            res.json({ success: true, user: rows[0] });
+            const user = rows[0];
+            user.condiciones_medicas = decryptText(user.condiciones_medicas);
+            user.restricciones = decryptText(user.restricciones);
+            res.json({ success: true, user });
         } else {
             res.json({ success: false, message: 'Usuario no encontrado' });
         }
@@ -562,6 +574,9 @@ app.put('/api/user/:id', async (req, res) => {
     console.log(' Actualizar perfil ID:', id);
 
     try {
+        const encrypted_condiciones = encryptText(condiciones_medicas);
+        const encrypted_restricciones = encryptText(restricciones);
+
         const [result] = await pool.query(
             `UPDATE usuario
              SET nombre = ?, email = ?, peso = ?, altura = ?, genero = ?,
@@ -569,7 +584,7 @@ app.put('/api/user/:id', async (req, res) => {
              WHERE id_usuario = ?`,
             [nombre, email, peso, altura ?? null, genero ?? null,
                 telefono ?? null, nivel_actividad ?? 'sedentario',
-                condiciones_medicas ?? null, restricciones ?? null, id]
+                encrypted_condiciones ?? null, encrypted_restricciones ?? null, id]
         );
 
         if (result.affectedRows > 0) {
@@ -972,7 +987,12 @@ app.get('/api/admin/usuarios', async (req, res) => {
              FROM usuario
              ORDER BY id_usuario ASC`
         );
-        res.json({ success: true, usuarios: rows });
+        const usuariosDesc = rows.map(u => ({
+            ...u,
+            condiciones_medicas: decryptText(u.condiciones_medicas),
+            restricciones: decryptText(u.restricciones)
+        }));
+        res.json({ success: true, usuarios: usuariosDesc });
     } catch (error) {
         console.error('[ERROR] Error al obtener usuarios:', error);
         res.status(500).json({ success: false, message: error.message });
@@ -985,6 +1005,9 @@ app.put('/api/admin/usuarios/:id', async (req, res) => {
     const { nombre, email, peso, altura, genero, telefono, rol,
         cuenta_activa, nivel_actividad, condiciones_medicas, restricciones } = req.body;
     try {
+        const encrypted_condiciones = encryptText(condiciones_medicas);
+        const encrypted_restricciones = encryptText(restricciones);
+
         const [result] = await pool.query(
             `UPDATE usuario SET
                 nombre = ?, email = ?, peso = ?, altura = ?, genero = ?,
@@ -993,8 +1016,8 @@ app.put('/api/admin/usuarios/:id', async (req, res) => {
              WHERE id_usuario = ?`,
             [nombre, email, peso, altura ?? null, genero ?? null,
                 telefono ?? null, rol ?? 'usuario', cuenta_activa ?? 1,
-                nivel_actividad ?? 'sedentario', condiciones_medicas ?? null,
-                restricciones ?? null, id]
+                nivel_actividad ?? 'sedentario', encrypted_condiciones ?? null,
+                encrypted_restricciones ?? null, id]
         );
         if (result.affectedRows > 0) {
             res.json({ success: true, message: 'Usuario actualizado correctamente' });
@@ -1245,7 +1268,12 @@ app.get('/api/admin/usuarios', async (req, res) => {
                     nivel_actividad, condiciones_medicas, restricciones
              FROM usuario ORDER BY id_usuario ASC`
         );
-        res.json({ success: true, usuarios: rows });
+        const usuariosDesc = rows.map(u => ({
+            ...u,
+            condiciones_medicas: decryptText(u.condiciones_medicas),
+            restricciones: decryptText(u.restricciones)
+        }));
+        res.json({ success: true, usuarios: usuariosDesc });
     } catch (error) {
         console.error(' Error al listar usuarios (admin):', error);
         res.status(500).json({ success: false, message: error.message });
@@ -1259,6 +1287,9 @@ app.put('/api/admin/usuarios/:id', async (req, res) => {
         rol, cuenta_activa, nivel_actividad,
         condiciones_medicas, restricciones } = req.body;
     try {
+        const encrypted_condiciones = encryptText(condiciones_medicas);
+        const encrypted_restricciones = encryptText(restricciones);
+
         const [result] = await pool.query(
             `UPDATE usuario SET
                 nombre = ?, email = ?, peso = ?, altura = ?, genero = ?,
@@ -1267,8 +1298,8 @@ app.put('/api/admin/usuarios/:id', async (req, res) => {
              WHERE id_usuario = ?`,
             [nombre, email, peso, altura ?? null, genero ?? null,
                 telefono ?? null, rol ?? 'usuario', cuenta_activa ?? 1,
-                nivel_actividad ?? 'sedentario', condiciones_medicas ?? null,
-                restricciones ?? null, id]
+                nivel_actividad ?? 'sedentario', encrypted_condiciones ?? null,
+                encrypted_restricciones ?? null, id]
         );
         if (result.affectedRows > 0) {
             res.json({ success: true, message: 'Usuario actualizado correctamente' });
