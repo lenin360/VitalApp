@@ -79,7 +79,7 @@ const createSession = function(req, res, extraData = {}) {
 // XSS (JavaScript Injection): Escapar caracteres peligrosos en inputs del usuario.
 function sanitizeInput(value) {
     if (typeof value !== 'string') return value;
-    return value
+    const sanitized = value
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
@@ -87,6 +87,13 @@ function sanitizeInput(value) {
         .replace(/'/g, '&#x27;')
         .replace(/\//g, '&#x2F;')
         .trim();
+        
+    // Si el texto cambió, significa que tenía caracteres peligrosos
+    if (sanitized !== value.trim()) {
+        console.warn(`[ADVERTENCIA] [ALERTA DE SEGURIDAD] Se detectaron y neutralizaron caracteres peligrosos. Entrada original contenía inyección.`);
+    }
+    
+    return sanitized;
 }
 
 // Middleware global: sanitiza automáticamente todos los campos del body

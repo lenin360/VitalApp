@@ -1,7 +1,25 @@
 import React from 'react';
+import { LogBox } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
+
+// Ocultar advertencia de dependencias de terceros en la consola del navegador
+const originalConsoleError = console.error;
+console.error = (...args) => {
+  if (typeof args[0] === 'string' && args[0].includes('props.pointerEvents is deprecated')) {
+    return;
+  }
+  originalConsoleError(...args);
+};
+
+const originalConsoleWarn = console.warn;
+console.warn = (...args) => {
+  if (typeof args[0] === 'string' && args[0].includes('props.pointerEvents is deprecated')) {
+    return;
+  }
+  originalConsoleWarn(...args);
+};
 
 // Importar pantallas
 import InicioScreen from './src/pantallas/InicioScreen';
