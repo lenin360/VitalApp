@@ -3,30 +3,34 @@ import { Platform } from 'react-native';
 
 /**
  * ╔══════════════════════════════════════════════════════════════════╗
- * ║              VitalApp — Configuración de API URL                 ║
+ * ║              VitalApp — Configuración de API URL               ║
  * ╠══════════════════════════════════════════════════════════════════╣
- * ║  Prioridad de detección:                                         ║
- * ║  1. EXPO_PUBLIC_API_URL (del .env.local — túnel público)         ║
- * ║  2. IP automática del servidor de desarrollo (red local)         ║
- * ║  3. localhost (solo para web/emulador)                           ║
+ * ║  Prioridad de detección:                                       ║
+ * ║  1. EXPO_PUBLIC_API_URL (del .env.local)                       ║
+ * ║  2. Backend online en Render                                   ║
+ * ║  3. IP automática del servidor (desarrollo local)              ║
+ * ║  4. Fallback online                                            ║
  * ╚══════════════════════════════════════════════════════════════════╝
  */
+
+const ONLINE_API = 'https://vitalapp-pw8k.onrender.com/api';
+
 const getApiUrl = (): string => {
-  // ── 1. URL del túnel público (cuando usas start-all.ps1) ──────────
-  // Expo carga automáticamente las variables EXPO_PUBLIC_* del .env.local
+  // ── 1. Variable pública personalizada ────────────────────────────
   const tunnelUrl = process.env.EXPO_PUBLIC_API_URL;
+
   if (tunnelUrl && tunnelUrl.startsWith('http')) {
-    console.log('🌐 Usando túnel público:', tunnelUrl);
+    console.log('🌐 Usando API personalizada:', tunnelUrl);
     return tunnelUrl;
   }
 
-  // ── 2. En Web, localhost funciona mejor con HTTP en desarrollo ─────
+  // ── 2. Web usa backend online ────────────────────────────────────
   if (Platform.OS === 'web') {
-    return 'http://localhost:5000/api';
+    console.log('🌍 Usando backend online (Render)');
+    return ONLINE_API;
   }
 
-  // ── 3. En celular: detectar IP del servidor automáticamente ────────
-  // Expo expone la IP de la máquina de desarrollo en Constants
+  // ── 3. Intentar detectar IP local automáticamente ────────────────
   try {
     const debuggerHost =
       Constants.expoConfig?.hostUri ??
@@ -35,17 +39,20 @@ const getApiUrl = (): string => {
 
     if (debuggerHost) {
       const ip = debuggerHost.split(':')[0];
-      const url = `http://${ip}:5000/api`;
-      console.log('📡 Usando IP automática del servidor:', url);
-      return url;
+      const localUrl = `http://${ip}:5000/api`;
+
+      console.log('📡 Usando servidor local:', localUrl);
+
+      return localUrl;
     }
   } catch {
-    // Ignorar errores de detección
+    // Ignorar errores
   }
 
-  // ── 4. Fallback: localhost ─────────────────────────────────────────
-  console.warn('⚠️  Usando localhost como fallback (puede no funcionar en celular)');
-  return 'http://localhost:5000/api';
+  // ── 4. Fallback: backend online ──────────────────────────────────
+  console.warn('⚠️ Usando backend online como fallback');
+
+  return ONLINE_API;
 };
 
 export const API_URL = getApiUrl();
