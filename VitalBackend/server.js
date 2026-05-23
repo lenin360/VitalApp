@@ -72,7 +72,7 @@ app.use(cookieParser()); // Necesario para leer y escribir cookies
 // ============================================
 const sessions = {};
 
-const createSession = function(req, res, extraData = {}) {
+const createSession = function (req, res, extraData = {}) {
     const userAgent = req.get('user-agent');
     const sessionId = crypto.randomBytes(16).toString('base64url');
     sessions[sessionId] = { userAgent, ...extraData };
@@ -99,12 +99,12 @@ function sanitizeInput(value) {
         .replace(/'/g, '&#x27;')
         .replace(/\//g, '&#x2F;')
         .trim();
-        
+
     // Si el texto cambió, significa que tenía caracteres peligrosos
     if (sanitized !== value.trim()) {
         console.warn(`⚠️ [ALERTA DE SEGURIDAD] Se detectaron y neutralizaron caracteres peligrosos. Entrada original contenía inyección.`);
     }
-    
+
     return sanitized;
 }
 
@@ -209,7 +209,7 @@ app.get('/api/csrf-token', (req, res) => {
 app.use((req, res, next) => {
     if (!['POST', 'PUT', 'DELETE'].includes(req.method)) return next();
     if (openRoutes.includes(req.path)) return next();
-    
+
     const csrfToken = req.headers['x-csrf-token'];
     if (!csrfToken || !csrfToken.includes('.')) {
         return res.status(403).json({ success: false, message: 'Falta Token CSRF o es inválido' });
@@ -326,11 +326,11 @@ app.post('/api/auth/google', async (req, res) => {
             idToken: token,
             audience: GOOGLE_CLIENT_ID,
         });
-        
+
         const payload = ticket.getPayload();
         const email = payload.email;
         const nombre = payload.name || 'Usuario Google';
-        
+
         console.log(` Token válido. Email recibido de Google: ${email}`);
 
         // Buscar si el usuario ya existe
@@ -349,7 +349,7 @@ app.post('/api/auth/google', async (req, res) => {
             console.log(' Usuario nuevo vía Google SSO, creando cuenta:', email);
             const dummyPassword = crypto.randomBytes(32).toString('hex');
             const hash = await bcrypt.hash(dummyPassword, 10);
-            
+
             const [result] = await pool.query(
                 `INSERT INTO usuario (nombre, email, password_hash, fecha_nacimiento, peso)
                  VALUES (?, ?, ?, '2000-01-01', 70)`,
@@ -363,13 +363,13 @@ app.post('/api/auth/google', async (req, res) => {
 
         // Iniciar sesión y generar sessionId
         const { password_hash: _, ...usuarioSinHash } = usuario;
-        
+
         const sessionId = createSession(req, res, {
             userId: usuarioSinHash.id_usuario,
             email: usuarioSinHash.email,
             rol: usuarioSinHash.rol
         });
-        
+
         console.log(` Login Google SSO exitoso para: ${email} | sessionId: ${sessionId}`);
         res.json({ success: true, user: usuarioSinHash, message: 'Autenticación con Google exitosa' });
 
