@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, 
-  SafeAreaView, Alert, RefreshControl, StatusBar, Platform
+  SafeAreaView, Alert, RefreshControl, StatusBar, Platform, useWindowDimensions
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, FontAwesome5, Entypo } from '@expo/vector-icons';
@@ -17,6 +17,8 @@ import { fetchSeguro } from '../utils/api';
 export default function HomeScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
   
   const [progressPercentage, setProgressPercentage] = useState(0);
   const [weeklyStats, setWeeklyStats] = useState({
@@ -415,7 +417,7 @@ export default function HomeScreen() {
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.gradientStart} />
       <ScrollView 
         style={[styles.container, { backgroundColor: colors.bg }]} 
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={true}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2563EB']} />
@@ -427,7 +429,8 @@ export default function HomeScreen() {
           colors={[colors.gradientStart, colors.gradientEnd]}
           style={styles.headerStats}
         >
-          <View style={styles.headerTitleRow}>
+          <View style={isDesktop ? styles.desktopContainer : undefined}>
+            <View style={styles.headerTitleRow}>
              <View>
                <Text style={styles.headerWelcomeText}>Hola, {nombreUsuario}</Text>
                <Text style={styles.headerGreetingSub}>Inicia tu jornada de bienestar hoy</Text>
@@ -462,8 +465,10 @@ export default function HomeScreen() {
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>MINUTOS</Text>
             </TouchableOpacity>
           </View>
+          </View>
         </LinearGradient>
 
+        <View style={isDesktop ? styles.desktopContainer : undefined}>
         {/* Banner de Motivación */}
         <TouchableOpacity style={[styles.motivationBanner, { backgroundColor: colors.card, borderColor: colors.cardBorder }]} onPress={irAEstadisticas} activeOpacity={0.9}>
           <View style={styles.bannerContent}>
@@ -621,7 +626,7 @@ export default function HomeScreen() {
           </View>
           <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>Rutinas adaptadas a tu ritmo</Text>
           
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.discoverScroll}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.discoverScroll}>
             {recommendedWorkouts.map((workout, index) => (
               <TouchableOpacity 
                 key={index} 
@@ -658,7 +663,7 @@ export default function HomeScreen() {
             
             <ScrollView 
                 horizontal 
-                showsHorizontalScrollIndicator={false} 
+                showsHorizontalScrollIndicator={true} 
                 style={styles.discoverScroll}
                 contentContainerStyle={styles.funScrollContent}
             >
@@ -811,6 +816,7 @@ export default function HomeScreen() {
           <Ionicons name="log-out-outline" size={24} color="#DC2626" />
           <Text style={styles.logoutText}>Cerrar sesión</Text>
         </TouchableOpacity>
+        </View>
 
       </ScrollView>
 
@@ -822,6 +828,11 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
   container: { flex: 1, backgroundColor: '#F8FAFC' },
+  desktopContainer: {
+    maxWidth: 1200,
+    width: '100%',
+    alignSelf: 'center',
+  },
   scrollContent: { paddingBottom: 100 },
   headerStats: {
     paddingHorizontal: 24, paddingBottom: 40, paddingTop: 20,

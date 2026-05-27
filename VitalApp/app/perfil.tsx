@@ -13,7 +13,8 @@ import {
     Switch,
     Platform,
     Modal,
-    Image
+    Image,
+    useWindowDimensions
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,6 +28,9 @@ import { useTheme } from '../hooks/useTheme';
 
 export default function PerfilScreen() {
     const router = useRouter();
+    const { width } = useWindowDimensions();
+    const isDesktop = width >= 768;
+    
     const [editando, setEditando] = useState(false);
     const [cargando, setCargando] = useState(true);
     const [guardando, setGuardando] = useState(false);
@@ -178,25 +182,34 @@ export default function PerfilScreen() {
         await AsyncStorage.setItem('notifications', valor.toString());
     };
 
+    const ejecutarLogout = async () => {
+        await AsyncStorage.removeItem('userId');
+        await AsyncStorage.removeItem('userSession');
+        await AsyncStorage.removeItem('jwtToken');
+        await AsyncStorage.removeItem('csrfToken');
+        router.replace('/login');
+    };
+
     const handleLogout = () => {
-        Alert.alert(
-            'Cerrar sesión',
-            '¿Desea finalizar la sesión actual?',
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Confirmar',
-                    style: 'destructive',
-                    onPress: async () => {
-                        await AsyncStorage.removeItem('userId');
-                        await AsyncStorage.removeItem('userSession');
-                        await AsyncStorage.removeItem('jwtToken');
-                        await AsyncStorage.removeItem('csrfToken');
-                        router.replace('/login');
+        if (Platform.OS === 'web') {
+            const confirmed = window.confirm('¿Desea finalizar la sesión actual?');
+            if (confirmed) {
+                ejecutarLogout();
+            }
+        } else {
+            Alert.alert(
+                'Cerrar sesión',
+                '¿Desea finalizar la sesión actual?',
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                        text: 'Confirmar',
+                        style: 'destructive',
+                        onPress: ejecutarLogout
                     }
-                }
-            ]
-        );
+                ]
+            );
+        }
     };
 
     const handleSetupMfa = async () => {
@@ -333,13 +346,14 @@ export default function PerfilScreen() {
             <ScrollView
                 style={[styles.container, { backgroundColor: colors.bg }]}
                 contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
+                showsVerticalScrollIndicator={true}
             >
                 {/* Header Premium y Avatar */}
                 <LinearGradient
                     colors={temaOscuro ? ['#0F172A', '#1E3A8A'] : ['#1E3A8A', '#2563EB']}
                     style={styles.headerGradient}
                 >
+                  <View style={isDesktop ? styles.desktopContainer : undefined}>
                     <View style={styles.headerTop}>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <TouchableOpacity onPress={() => router.push('/home')} style={{ marginRight: 16 }}>
@@ -386,7 +400,10 @@ export default function PerfilScreen() {
                         <Text style={styles.avatarName}>{usuario.nombre}</Text>
                         <Text style={styles.avatarEmail}>{usuario.email || 'Sin correo'}</Text>
                     </View>
+                  </View>
                 </LinearGradient>
+
+                <View style={isDesktop ? styles.desktopContainer : undefined}>
 
                 {/* Mensajes de feedback */}
                 {mostrarMensaje !== '' && (
@@ -428,7 +445,7 @@ export default function PerfilScreen() {
                             <Text style={{ color: '#2563EB', fontWeight: '700' }}>Ver todas</Text>
                         </TouchableOpacity>
                     </View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -5 }}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={true} style={{ marginHorizontal: -5 }}>
                         <View style={styles.badgeItem}>
                             <View style={[styles.badgeCircle, usuario.ejerciciosCompletados >= 1 ? { backgroundColor: '#FEF3C7' } : { backgroundColor: '#F1F5F9' }]}>
                                 <Text style={[styles.badgeEmoji, usuario.ejerciciosCompletados < 1 && { opacity: 0.3 }]}></Text>
@@ -594,6 +611,7 @@ export default function PerfilScreen() {
                     <Text style={styles.logoutButtonText}>Cerrar Sesión Segura</Text>
                 </TouchableOpacity>
 
+                </View>
             </ScrollView>
 
             {/* Modal de Configuración MFA */}
@@ -663,10 +681,14 @@ export default function PerfilScreen() {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: '#F8FAFC'
     },
     container: {
         flex: 1,
+    },
+    desktopContainer: {
+        maxWidth: 1200,
+        width: '100%',
+        alignSelf: 'center',
     },
     scrollContent: {
         paddingBottom: 100,

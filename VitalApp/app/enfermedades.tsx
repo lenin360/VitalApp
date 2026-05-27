@@ -7,7 +7,9 @@ import {
   SafeAreaView,
   StatusBar,
   TouchableOpacity,
-  Alert
+  Alert,
+  Platform,
+  useWindowDimensions
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +32,8 @@ const CONDITION_OPTIONS = [
 export default function EnfermedadesScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
   const [selectedConditions, setSelectedConditions] = useState<string[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,10 +99,19 @@ export default function EnfermedadesScreen() {
           console.log('No se pudo sincronizar condiciones con el backend:', error);
         }
       }
-      Alert.alert('Guardado', 'Tus condiciones de salud han sido actualizadas.');
+      if (Platform.OS === 'web') {
+          window.alert('Tus condiciones de salud han sido actualizadas.');
+      } else {
+          Alert.alert('Guardado', 'Tus condiciones de salud han sido actualizadas.');
+      }
+      router.replace('/home');
     } catch (error) {
       console.log('Error guardando condiciones:', error);
-      Alert.alert('Error', 'No se pudieron guardar tus condiciones. Intenta de nuevo.');
+      if (Platform.OS === 'web') {
+          window.alert('No se pudieron guardar tus condiciones. Intenta de nuevo.');
+      } else {
+          Alert.alert('Error', 'No se pudieron guardar tus condiciones. Intenta de nuevo.');
+      }
     }
   };
 
@@ -124,8 +137,9 @@ export default function EnfermedadesScreen() {
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.gradientStart} />
       <ScrollView
         contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={true}
       >
+        <View style={isDesktop ? styles.desktopContainer : undefined}>
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}> 
           <Text style={[styles.title, { color: colors.text }]}>Enfermedades</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Marca las condiciones de salud que aplican para adaptar tus ejercicios de forma más segura.</Text>
@@ -148,6 +162,7 @@ export default function EnfermedadesScreen() {
             <Text style={[styles.backButtonText, { color: colors.text }]}>Volver a inicio</Text>
           </TouchableOpacity>
         </View>
+        </View>
       </ScrollView>
       <MenuInferior />
     </SafeAreaView>
@@ -161,6 +176,11 @@ const styles = StyleSheet.create({
   content: {
     padding: 24,
     paddingBottom: 120,
+  },
+  desktopContainer: {
+    maxWidth: 1200,
+    width: '100%',
+    alignSelf: 'center',
   },
   card: {
     borderRadius: 24,
