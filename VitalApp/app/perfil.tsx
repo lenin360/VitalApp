@@ -178,25 +178,34 @@ export default function PerfilScreen() {
         await AsyncStorage.setItem('notifications', valor.toString());
     };
 
+    const ejecutarLogout = async () => {
+        await AsyncStorage.removeItem('userId');
+        await AsyncStorage.removeItem('userSession');
+        await AsyncStorage.removeItem('jwtToken');
+        await AsyncStorage.removeItem('csrfToken');
+        router.replace('/login');
+    };
+
     const handleLogout = () => {
-        Alert.alert(
-            'Cerrar sesión',
-            '¿Desea finalizar la sesión actual?',
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Confirmar',
-                    style: 'destructive',
-                    onPress: async () => {
-                        await AsyncStorage.removeItem('userId');
-                        await AsyncStorage.removeItem('userSession');
-                        await AsyncStorage.removeItem('jwtToken');
-                        await AsyncStorage.removeItem('csrfToken');
-                        router.replace('/login');
+        if (Platform.OS === 'web') {
+            const confirmed = window.confirm('¿Desea finalizar la sesión actual?');
+            if (confirmed) {
+                ejecutarLogout();
+            }
+        } else {
+            Alert.alert(
+                'Cerrar sesión',
+                '¿Desea finalizar la sesión actual?',
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                        text: 'Confirmar',
+                        style: 'destructive',
+                        onPress: ejecutarLogout
                     }
-                }
-            ]
-        );
+                ]
+            );
+        }
     };
 
     const handleSetupMfa = async () => {
@@ -333,7 +342,7 @@ export default function PerfilScreen() {
             <ScrollView
                 style={[styles.container, { backgroundColor: colors.bg }]}
                 contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
+                showsVerticalScrollIndicator={true}
             >
                 {/* Header Premium y Avatar */}
                 <LinearGradient
@@ -428,7 +437,7 @@ export default function PerfilScreen() {
                             <Text style={{ color: '#2563EB', fontWeight: '700' }}>Ver todas</Text>
                         </TouchableOpacity>
                     </View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -5 }}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={true} style={{ marginHorizontal: -5 }}>
                         <View style={styles.badgeItem}>
                             <View style={[styles.badgeCircle, usuario.ejerciciosCompletados >= 1 ? { backgroundColor: '#FEF3C7' } : { backgroundColor: '#F1F5F9' }]}>
                                 <Text style={[styles.badgeEmoji, usuario.ejerciciosCompletados < 1 && { opacity: 0.3 }]}></Text>

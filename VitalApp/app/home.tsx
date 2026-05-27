@@ -415,7 +415,7 @@ export default function HomeScreen() {
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.gradientStart} />
       <ScrollView 
         style={[styles.container, { backgroundColor: colors.bg }]} 
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={true}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2563EB']} />
@@ -621,7 +621,7 @@ export default function HomeScreen() {
           </View>
           <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>Rutinas adaptadas a tu ritmo</Text>
           
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.discoverScroll}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.discoverScroll}>
             {recommendedWorkouts.map((workout, index) => (
               <TouchableOpacity 
                 key={index} 
@@ -658,7 +658,7 @@ export default function HomeScreen() {
             
             <ScrollView 
                 horizontal 
-                showsHorizontalScrollIndicator={false} 
+                showsHorizontalScrollIndicator={true} 
                 style={styles.discoverScroll}
                 contentContainerStyle={styles.funScrollContent}
             >

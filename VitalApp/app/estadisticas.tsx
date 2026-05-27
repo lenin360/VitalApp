@@ -206,7 +206,7 @@ export default function EstadisticasScreen() {
             <ScrollView 
                 style={[styles.container, { backgroundColor: colors.bg }]}
                 contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
+                showsVerticalScrollIndicator={true}
             >
                 {/* Header Premium */}
                 <LinearGradient

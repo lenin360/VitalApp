@@ -7,7 +7,8 @@ import {
   SafeAreaView,
   StatusBar,
   TouchableOpacity,
-  Alert
+  Alert,
+  Platform
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -95,10 +96,19 @@ export default function EnfermedadesScreen() {
           console.log('No se pudo sincronizar condiciones con el backend:', error);
         }
       }
-      Alert.alert('Guardado', 'Tus condiciones de salud han sido actualizadas.');
+      if (Platform.OS === 'web') {
+          window.alert('Tus condiciones de salud han sido actualizadas.');
+      } else {
+          Alert.alert('Guardado', 'Tus condiciones de salud han sido actualizadas.');
+      }
+      router.replace('/home');
     } catch (error) {
       console.log('Error guardando condiciones:', error);
-      Alert.alert('Error', 'No se pudieron guardar tus condiciones. Intenta de nuevo.');
+      if (Platform.OS === 'web') {
+          window.alert('No se pudieron guardar tus condiciones. Intenta de nuevo.');
+      } else {
+          Alert.alert('Error', 'No se pudieron guardar tus condiciones. Intenta de nuevo.');
+      }
     }
   };
 
@@ -124,7 +134,7 @@ export default function EnfermedadesScreen() {
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.gradientStart} />
       <ScrollView
         contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={true}
       >
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}> 
           <Text style={[styles.title, { color: colors.text }]}>Enfermedades</Text>

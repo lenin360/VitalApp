@@ -10,7 +10,8 @@ import {
     TextInput,
     StatusBar,
     Platform,
-    Image
+    Image,
+    useWindowDimensions
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +31,7 @@ interface Ejercicio {
     dificultad: string;
     categoria: string;
     url?: string;
+    enfermedades_incompatibles?: string;
 }
 
 export default function EjerciciosScreen() {
@@ -41,6 +43,8 @@ export default function EjerciciosScreen() {
     const [showOnlyRecommended, setShowOnlyRecommended] = useState(false);
     const router = useRouter();
     const { colors } = useTheme();
+    const { width } = useWindowDimensions();
+    const isDesktop = width >= 768;
 
     useEffect(() => {
         cargarEjercicios();
@@ -77,7 +81,8 @@ export default function EjerciciosScreen() {
             const condicionesGuardadas = await AsyncStorage.getItem('userConditions');
             if (condicionesGuardadas) {
                 const condiciones = JSON.parse(condicionesGuardadas);
-                setUserConditions(Array.isArray(condiciones) ? condiciones : []);
+                const conditionsArray = Array.isArray(condiciones) ? condiciones : [];
+                setUserConditions(conditionsArray);
             }
         } catch (error) {
             console.log('Error cargando condiciones:', error);
@@ -97,7 +102,8 @@ export default function EjerciciosScreen() {
                 duracion: e.duracion_min ? e.duracion_min * 60 : (e.duracion || 0),
                 dificultad: e.dificultad,
                 categoria: e.categoria || 'Variado',
-                url: e.link_video || e.url || ''
+                url: e.link_video || e.url || '',
+                enfermedades_incompatibles: e.enfermedades_incompatibles || ''
             }));
 
             setEjercicios(ejerciciosMapeados);
@@ -106,15 +112,15 @@ export default function EjerciciosScreen() {
             console.error('Error:', error);
             // Datos de prueba premium extendidos
             const datosPrueba = [
-                { id: 1, nombre: 'Zumba Gold: Ritmos Latinos', descripcion: 'Diviértete bailando ritmos suaves diseñados para tu energía', duracion: 1200, dificultad: 'Fácil', categoria: 'Zumba', url: '' },
-                { id: 2, nombre: 'Baile en Silla Alegre', descripcion: 'Mueve el cuerpo al compás de la música sin levantarte', duracion: 900, dificultad: 'Fácil', categoria: 'Zumba', url: '' },
-                { id: 3, nombre: 'Cardio Dance Pop', descripcion: 'Ejercítate con los mejores éxitos musicales de siempre', duracion: 1500, dificultad: 'Normal', categoria: 'Zumba', url: '' },
-                { id: 4, nombre: 'Salto De Tijera', descripcion: 'Excelente ejercicio cardiovascular para despertar el cuerpo', duracion: 1800, dificultad: 'Normal', categoria: 'Cardio', url: '' },
-                { id: 5, nombre: 'Toque al Talón', descripcion: 'Fortalece piernas y glúteos suavemente', duracion: 900, dificultad: 'Fácil', categoria: 'Fuerza', url: '' },
-                { id: 6, nombre: 'Abdominal Cruzado', descripcion: 'Trabaja el núcleo y mejora la postura', duracion: 1200, dificultad: 'Normal', categoria: 'Fuerza', url: '' },
-                { id: 7, nombre: 'Equilibrio en un pie', descripcion: 'Mejora tu estabilidad y evita caídas', duracion: 300, dificultad: 'Fácil', categoria: 'Equilibrio', url: '' },
-                { id: 8, nombre: 'Yoga en silla', descripcion: 'Estiramientos suaves sin levantarte', duracion: 600, dificultad: 'Fácil', categoria: 'Silla', url: '' },
-                { id: 9, nombre: 'Caminata rítmica', descripcion: 'Marcha al compás de la música', duracion: 1200, dificultad: 'Normal', categoria: 'Cardio', url: '' },
+                { id: 1, nombre: 'Zumba Gold: Ritmos Latinos', descripcion: 'Diviértete bailando ritmos suaves diseñados para tu energía', duracion: 1200, dificultad: 'Fácil', categoria: 'Zumba', url: '', enfermedades_incompatibles: 'Problemas de corazón' },
+                { id: 2, nombre: 'Baile en Silla Alegre', descripcion: 'Mueve el cuerpo al compás de la música sin levantarte', duracion: 900, dificultad: 'Fácil', categoria: 'Zumba', url: '', enfermedades_incompatibles: '' },
+                { id: 3, nombre: 'Cardio Dance Pop', descripcion: 'Ejercítate con los mejores éxitos musicales de siempre', duracion: 1500, dificultad: 'Normal', categoria: 'Zumba', url: '', enfermedades_incompatibles: '' },
+                { id: 4, nombre: 'Salto De Tijera', descripcion: 'Excelente ejercicio cardiovascular para despertar el cuerpo', duracion: 1800, dificultad: 'Normal', categoria: 'Cardio', url: '', enfermedades_incompatibles: 'Osteoporosis, Artritis' },
+                { id: 5, nombre: 'Toque al Talón', descripcion: 'Fortalece piernas y glúteos suavemente', duracion: 900, dificultad: 'Fácil', categoria: 'Fuerza', url: '', enfermedades_incompatibles: '' },
+                { id: 6, nombre: 'Abdominal Cruzado', descripcion: 'Trabaja el núcleo y mejora la postura', duracion: 1200, dificultad: 'Normal', categoria: 'Fuerza', url: '', enfermedades_incompatibles: '' },
+                { id: 7, nombre: 'Equilibrio en un pie', descripcion: 'Mejora tu estabilidad y evita caídas', duracion: 300, dificultad: 'Fácil', categoria: 'Equilibrio', url: '', enfermedades_incompatibles: '' },
+                { id: 8, nombre: 'Yoga en silla', descripcion: 'Estiramientos suaves sin levantarte', duracion: 600, dificultad: 'Fácil', categoria: 'Silla', url: '', enfermedades_incompatibles: '' },
+                { id: 9, nombre: 'Caminata rítmica', descripcion: 'Marcha al compás de la música', duracion: 1200, dificultad: 'Normal', categoria: 'Cardio', url: '', enfermedades_incompatibles: '' },
             ];
             setEjercicios(datosPrueba);
             setFiltrados(datosPrueba);
@@ -184,38 +190,52 @@ export default function EjerciciosScreen() {
     const getExerciseAdvice = (ejercicio: Ejercicio) => {
         const categoria = (ejercicio.categoria ?? '').toString().toLowerCase();
         const nombre = (ejercicio.nombre ?? '').toString().toLowerCase();
+        const advices = [];
 
-        if (hasHeartCondition || hasHypertension) {
-            if (['cardio', 'zumba', 'fuerza'].includes(categoria)) {
-                return 'No recomendado para tu condición cardíaca o hipertensión';
+        // Evaluar enfermedades incompatibles configuradas desde el panel de admin
+        if (ejercicio.enfermedades_incompatibles) {
+            const incompatibles = ejercicio.enfermedades_incompatibles.split(',').map(s => s.trim().toLowerCase());
+            for (const enfermedad of incompatibles) {
+                if (hasCondition(enfermedad)) {
+                    advices.push(`No recomendado por su condición de ${enfermedad}.`);
+                }
             }
         }
 
-        if (hasCancer) {
-            if (['cardio', 'fuerza'].includes(categoria)) {
-                return 'No recomendado durante condiciones de cáncer; elige algo más suave';
+        // Lógica de respaldo por defecto si no hay enfermedades configuradas
+        if (!ejercicio.enfermedades_incompatibles) {
+            if (hasHeartCondition || hasHypertension) {
+                if (['cardio', 'zumba', 'fuerza'].includes(categoria)) {
+                    advices.push('No recomendado por su condición cardíaca o hipertensión.');
+                }
+            }
+
+            if (hasCancer) {
+                if (['cardio', 'fuerza'].includes(categoria)) {
+                    advices.push('No es bueno este ejercicio por su condición de cáncer. Elija algo suave.');
+                }
+            }
+
+            if (hasArthritis) {
+                if (['fuerza', 'zumba'].includes(categoria)) {
+                    advices.push('Puede ser incómodo por su artritis. Mejor elija movilidad.');
+                }
+            }
+
+            if (hasOsteoporosis) {
+                if (['fuerza', 'cardio'].includes(categoria)) {
+                    advices.push('Evite ejercicios de impacto elevado por su osteoporosis.');
+                }
+            }
+
+            if (hasDiabetes) {
+                if (['cardio', 'zumba'].includes(categoria) || nombre.includes('caminata')) {
+                    advices.push('Precaución por su diabetes: controle su esfuerzo y azúcar.');
+                }
             }
         }
 
-        if (hasArthritis) {
-            if (['fuerza', 'zumba'].includes(categoria)) {
-                return 'Puede ser incómodo si tienes artritis; elige ejercicios suaves';
-            }
-        }
-
-        if (hasOsteoporosis) {
-            if (['fuerza', 'cardio'].includes(categoria)) {
-                return 'Evita ejercicios de impacto elevado si tienes osteoporosis';
-            }
-        }
-
-        if (hasDiabetes) {
-            if (['cardio', 'zumba'].includes(categoria) || nombre.includes('caminata')) {
-                return 'Hazlo con precaución y mantén tu ritmo constante';
-            }
-        }
-
-        return '';
+        return advices.length > 0 ? advices.join('\n') : '';
     };
 
     const getDificultadColor = (dificultad: string) => {
@@ -250,90 +270,92 @@ export default function EjerciciosScreen() {
             <ScrollView 
                 style={styles.container}
                 contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
+                showsVerticalScrollIndicator={true}
             >
                 {/* Cabecera Premium */}
                 <LinearGradient
                     colors={[colors.gradientStart, colors.gradientEnd]}
                     style={styles.headerGradient}
                 >
-                <View style={styles.headerTop}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <TouchableOpacity onPress={() => router.push('/home')} style={{ marginRight: 16 }}>
-                            <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
-                        </TouchableOpacity>
-                        <Text style={styles.headerTitle}>Explorar</Text>
+                  <View style={isDesktop ? styles.desktopContainer : undefined}>
+                    <View style={styles.headerTop}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <TouchableOpacity onPress={() => router.push('/home')} style={{ marginRight: 16 }}>
+                                <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
+                            </TouchableOpacity>
+                            <Text style={styles.headerTitle}>Explorar</Text>
+                        </View>
+                        <View style={styles.countBadge}>
+                            <Text style={styles.countText}>{visibleEjercicios.length} rutinas</Text>
+                        </View>
                     </View>
-                    <View style={styles.countBadge}>
-                        <Text style={styles.countText}>{visibleEjercicios.length} rutinas</Text>
+                    <View style={styles.conditionBanner}>
+                        <Text style={styles.conditionBannerText} numberOfLines={2}>
+                            {userConditions.length > 0 ? `Condiciones registrados: ${conditionSummary}` : 'Marca tus condiciones en Enfermedades para ver recomendaciones y ejercicios no recomendados.'}
+                        </Text>
                     </View>
-                </View>
-                <View style={styles.conditionBanner}>
-                    <Text style={styles.conditionBannerText} numberOfLines={2}>
-                        {userConditions.length > 0 ? `Condiciones registrados: ${conditionSummary}` : 'Marca tus condiciones en Enfermedades para ver recomendaciones y ejercicios no recomendados.'}
-                    </Text>
-                </View>
-                
-                <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
-                    <Ionicons name="search" size={24} color={colors.textSecondary} style={styles.searchIcon} />
-                    <TextInput
-                        style={[styles.searchInput, { color: colors.text }]}
-                        placeholder="Buscar por nombre..."
-                        placeholderTextColor={colors.textSecondary}
-                        value={busqueda}
-                        onChangeText={setBusqueda}
-                        clearButtonMode="while-editing"
-                    />
-                </View>
+                    
+                    <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
+                        <Ionicons name="search" size={24} color={colors.textSecondary} style={styles.searchIcon} />
+                        <TextInput
+                            style={[styles.searchInput, { color: colors.text }]}
+                            placeholder="Buscar por nombre..."
+                            placeholderTextColor={colors.textSecondary}
+                            value={busqueda}
+                            onChangeText={setBusqueda}
+                            clearButtonMode="while-editing"
+                        />
+                    </View>
 
-                {/* Filtro de Categorías */}
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.categoryScroll}
-                    contentContainerStyle={styles.categoryContent}
-                >
-                    {categorias.map((cat) => (
+                    {/* Filtro de Categorías */}
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={true}
+                        style={styles.categoryScroll}
+                        contentContainerStyle={styles.categoryContent}
+                    >
+                        {categorias.map((cat) => (
+                            <TouchableOpacity
+                                key={cat}
+                                style={[
+                                    styles.categoryChip,
+                                    categoriaSeleccionada === cat && styles.categoryChipActive,
+                                    { backgroundColor: categoriaSeleccionada === cat ? '#FFFFFF' : 'rgba(255,255,255,0.15)' }
+                                ]}
+                                onPress={() => setCategoriaSeleccionada(cat)}
+                            >
+                                <Text style={[
+                                    styles.categoryChipText,
+                                    categoriaSeleccionada === cat && styles.categoryChipTextActive
+                                ]}>
+                                    {cat}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                    <View style={styles.recommendToggleRow}>
                         <TouchableOpacity
-                            key={cat}
                             style={[
-                                styles.categoryChip,
-                                categoriaSeleccionada === cat && styles.categoryChipActive,
-                                { backgroundColor: categoriaSeleccionada === cat ? '#FFFFFF' : 'rgba(255,255,255,0.15)' }
+                                styles.recommendToggle,
+                                showOnlyRecommended && styles.recommendToggleActive,
                             ]}
-                            onPress={() => setCategoriaSeleccionada(cat)}
+                            onPress={() => setShowOnlyRecommended((prev) => !prev)}
                         >
+                            <Ionicons
+                                name={showOnlyRecommended ? 'eye-off' : 'eye'}
+                                size={18}
+                                color={showOnlyRecommended ? '#FFFFFF' : '#2563EB'}
+                            />
                             <Text style={[
-                                styles.categoryChipText,
-                                categoriaSeleccionada === cat && styles.categoryChipTextActive
+                                styles.recommendToggleText,
+                                showOnlyRecommended && { color: '#FFFFFF' }
                             ]}>
-                                {cat}
+                                {showOnlyRecommended ? 'Solo recomendados' : 'Mostrar no recomendados'}
                             </Text>
                         </TouchableOpacity>
-                    ))}
-                </ScrollView>
-                <View style={styles.recommendToggleRow}>
-                    <TouchableOpacity
-                        style={[
-                            styles.recommendToggle,
-                            showOnlyRecommended && styles.recommendToggleActive,
-                        ]}
-                        onPress={() => setShowOnlyRecommended((prev) => !prev)}
-                    >
-                        <Ionicons
-                            name={showOnlyRecommended ? 'eye-off' : 'eye'}
-                            size={18}
-                            color={showOnlyRecommended ? '#FFFFFF' : '#2563EB'}
-                        />
-                        <Text style={[
-                            styles.recommendToggleText,
-                            showOnlyRecommended && { color: '#FFFFFF' }
-                        ]}>
-                            {showOnlyRecommended ? 'Solo recomendados' : 'Mostrar no recomendados'}
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-            </LinearGradient>
+                    </View>
+                  </View>
+                </LinearGradient>
 
                 {visibleEjercicios.length === 0 ? (
                     <View style={styles.emptyContainer}>
@@ -344,105 +366,106 @@ export default function EjerciciosScreen() {
                         <Text style={styles.emptySubtext}>Prueba buscando con otras palabras</Text>
                     </View>
                 ) : (
-                    visibleEjercicios.map((ejercicio, index) => {
-                        const videoId = getVideoId(ejercicio);
-                        const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
+                    <View style={isDesktop ? styles.desktopContainer : undefined}>
+                        <View style={isDesktop ? styles.gridContainer : undefined}>
+                            {visibleEjercicios.map((ejercicio, index) => {
+                                const videoId = getVideoId(ejercicio);
+                                const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
 
-                        return (
-                            <TouchableOpacity
-                                key={ejercicio.id}
-                                style={[styles.tarjetaEjercicio, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
-                                onPress={() => verDetalle(ejercicio)}
-                                activeOpacity={0.9}
-                            >
-                                {/* Video Thumbnail */}
-                                {thumbnailUrl && (
-                                    <View style={styles.thumbnailContainer}>
-                                        <Image
-                                            source={{ uri: thumbnailUrl }}
-                                            style={styles.thumbnailImage}
-                                            resizeMode="cover"
-                                        />
-                                        {/* Play button overlay */}
-                                        <View style={styles.playOverlay}>
-                                            <View style={styles.playButton}>
-                                                <Ionicons name="play" size={32} color="#FFFFFF" />
+                                return (
+                                    <TouchableOpacity
+                                        key={ejercicio.id}
+                                        style={[
+                                            styles.tarjetaEjercicio, 
+                                            isDesktop && styles.tarjetaEjercicioDesktop,
+                                            { backgroundColor: colors.card, borderColor: colors.cardBorder }
+                                        ]}
+                                        onPress={() => verDetalle(ejercicio)}
+                                        activeOpacity={0.9}
+                                    >
+                                    {/* Video Thumbnail */}
+                                    {thumbnailUrl && (
+                                        <View style={styles.thumbnailContainer}>
+                                            <Image
+                                                source={{ uri: thumbnailUrl }}
+                                                style={styles.thumbnailImage}
+                                                resizeMode="cover"
+                                            />
+                                            {/* Play button overlay */}
+                                            <View style={styles.playOverlay}>
+                                                <View style={styles.playButton}>
+                                                    <Ionicons name="play" size={32} color="#FFFFFF" />
+                                                </View>
+                                            </View>
+                                            {/* Duration badge */}
+                                            <View style={styles.durationBadge}>
+                                                <Ionicons name="time-outline" size={12} color="#FFFFFF" />
+                                                <Text style={styles.durationBadgeText}>
+                                                    {Math.floor(ejercicio.duracion / 60)} min
+                                                </Text>
+                                            </View>
+                                            {/* Category badge */}
+                                            <View style={styles.categoryBadge}>
+                                                <Ionicons name={getCategoryIcon(ejercicio.categoria)} size={12} color="#FFFFFF" />
+                                                <Text style={styles.categoryBadgeText}>{ejercicio.categoria}</Text>
                                             </View>
                                         </View>
-                                        {/* Duration badge */}
-                                        <View style={styles.durationBadge}>
-                                            <Ionicons name="time-outline" size={12} color="#FFFFFF" />
-                                            <Text style={styles.durationBadgeText}>
-                                                {Math.floor(ejercicio.duracion / 60)} min
-                                            </Text>
+                                    )}
+
+                                    {/* Card content */}
+                                    <View style={styles.cardContent}>
+                                        <View style={styles.tarjetaHeader}>
+                                            <View style={[styles.tarjetaIconContainer, { backgroundColor: colors.settingIconBg }]}>
+                                                <Ionicons
+                                                    name={getCategoryIcon(ejercicio.categoria)}
+                                                    size={28}
+                                                    color={colors.isDark ? '#60A5FA' : '#2563EB'}
+                                                />
+                                            </View>
+                                            <View style={styles.tarjetaInfo}>
+                                                <Text style={[styles.ejercicioNombre, { color: colors.text }]} numberOfLines={2}>{ejercicio.nombre}</Text>
+                                                <Text style={[styles.ejercicioDescripcion, { color: colors.textSecondary }]} numberOfLines={2}>
+                                                    {ejercicio.descripcion}
+                                                </Text>
+                                            </View>
                                         </View>
-                                        {/* Category badge */}
-                                        <View style={styles.categoryBadge}>
-                                            <Ionicons name={getCategoryIcon(ejercicio.categoria)} size={12} color="#FFFFFF" />
-                                            <Text style={styles.categoryBadgeText}>{ejercicio.categoria}</Text>
+                                        
+                                        {getExerciseAdvice(ejercicio) ? (
+                                            <View style={[styles.warningBanner, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}> 
+                                                <Ionicons name="warning-outline" size={16} color="#B91C1C" />
+                                                <Text style={styles.warningText}>{getExerciseAdvice(ejercicio)}</Text>
+                                            </View>
+                                        ) : null}
+
+                                        <View style={[styles.divider, { backgroundColor: colors.cardBorder }]} />
+
+                                        <View style={styles.ejercicioFooter}>
+                                            {/* Tiempo */}
+                                            <View style={[styles.footerBadge, { backgroundColor: colors.bg }]}>
+                                                <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
+                                                <Text style={[styles.footerText, { color: colors.textSecondary }]}>
+                                                    {Math.floor(ejercicio.duracion / 60)} min
+                                                </Text>
+                                            </View>
+                                            {/* Dificultad */}
+                                            <View style={[styles.footerBadge, { backgroundColor: getDificultadColor(ejercicio.dificultad).bg }]}>
+                                                <Ionicons name="bar-chart-outline" size={16} color={getDificultadColor(ejercicio.dificultad).text} />
+                                                <Text style={[styles.dificultad, { color: getDificultadColor(ejercicio.dificultad).text }]}>
+                                                    {ejercicio.dificultad}
+                                                </Text>
+                                            </View>
+                                            {/* Ver video */}
+                                            <View style={styles.verVideoBadge}>
+                                                <Ionicons name="play-circle" size={16} color="#FFFFFF" />
+                                                <Text style={styles.verVideoText}>Ver video</Text>
+                                            </View>
                                         </View>
                                     </View>
-                                )}
-
-                                {/* Card content */}
-                                <View style={styles.cardContent}>
-                                    <View style={styles.tarjetaHeader}>
-                                        <View style={[styles.tarjetaIconContainer, { backgroundColor: colors.settingIconBg }]}>
-                                            <Ionicons
-                                                name={getCategoryIcon(ejercicio.categoria)}
-                                                size={28}
-                                                color={colors.isDark ? '#60A5FA' : '#2563EB'}
-                                            />
-                                        </View>
-                                        <View style={styles.tarjetaInfo}>
-                                            <Text style={[styles.ejercicioNombre, { color: colors.text }]} numberOfLines={2}>{ejercicio.nombre}</Text>
-                                            <Text style={[styles.ejercicioDescripcion, { color: colors.textSecondary }]} numberOfLines={2}>
-                                                {ejercicio.descripcion}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                    
-                                    {getExerciseAdvice(ejercicio) ? (
-                                        <View style={[styles.warningBanner, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}> 
-                                            <Ionicons name="warning-outline" size={16} color="#B91C1C" />
-                                            <Text style={styles.warningText}>{getExerciseAdvice(ejercicio)}</Text>
-                                        </View>
-                                    ) : null}
-
-                                    {getExerciseAdvice(ejercicio) ? (
-                                        <View style={[styles.warningBanner, { backgroundColor: '#FEE2E2', borderColor: '#FECACA', marginTop: 12, marginHorizontal: 0 }]}> 
-                                            <Ionicons name="warning-outline" size={16} color="#B91C1C" />
-                                            <Text style={styles.warningText}>{getExerciseAdvice(ejercicio)}</Text>
-                                        </View>
-                                    ) : null}
-
-                                    <View style={[styles.divider, { backgroundColor: colors.cardBorder }]} />
-
-                                    <View style={styles.ejercicioFooter}>
-                                        {/* Tiempo */}
-                                        <View style={[styles.footerBadge, { backgroundColor: colors.bg }]}>
-                                            <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
-                                            <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-                                                {Math.floor(ejercicio.duracion / 60)} min
-                                            </Text>
-                                        </View>
-                                        {/* Dificultad */}
-                                        <View style={[styles.footerBadge, { backgroundColor: getDificultadColor(ejercicio.dificultad).bg }]}>
-                                            <Ionicons name="bar-chart-outline" size={16} color={getDificultadColor(ejercicio.dificultad).text} />
-                                            <Text style={[styles.dificultad, { color: getDificultadColor(ejercicio.dificultad).text }]}>
-                                                {ejercicio.dificultad}
-                                            </Text>
-                                        </View>
-                                        {/* Ver video */}
-                                        <View style={styles.verVideoBadge}>
-                                            <Ionicons name="play-circle" size={16} color="#FFFFFF" />
-                                            <Text style={styles.verVideoText}>Ver video</Text>
-                                        </View>
-                                    </View>
-                                </View>
-                            </TouchableOpacity>
-                        );
-                    })
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    </View>
                 )}
             </ScrollView>
 
@@ -636,6 +659,24 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '700',
     },
+    gridContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        paddingHorizontal: 20,
+        gap: 30,
+        paddingTop: 10,
+    },
+    desktopContainer: {
+        maxWidth: 1200,
+        width: '100%',
+        alignSelf: 'center',
+    },
+    tarjetaEjercicioDesktop: {
+        width: 350,
+        flexGrow: 0,
+        marginBottom: 30,
+    },
     tarjetaEjercicio: { 
         backgroundColor: '#FFFFFF', 
         borderRadius: 24, 
@@ -812,7 +853,8 @@ const styles = StyleSheet.create({
         paddingRight: 100,
         gap: 12,
         alignItems: 'center',
-        paddingVertical: 12, // Give room for chips and shadows
+        paddingTop: 12,
+        paddingBottom: 24, // Extra padding to ensure the scrollbar is visible and clickable on Web
     },
     categoryChip: {
         paddingHorizontal: 20,

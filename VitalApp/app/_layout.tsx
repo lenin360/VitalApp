@@ -1,10 +1,40 @@
 import { Stack } from 'expo-router';
 import { useWindowDimensions, Platform } from 'react-native';
 import { useEffect } from 'react';
+import { useTheme } from '../hooks/useTheme';
+import GlobalNotification from '../components/GlobalNotification';
+
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.textContent = `
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.6);
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.9);
+    }
+    
+    /* Scrollbar for light backgrounds (like the main page) */
+    html {
+      --scrollbar-color: rgba(0, 0, 0, 0.2);
+      --scrollbar-hover: rgba(0, 0, 0, 0.3);
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 export default function RootLayout() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
+  const { colors } = useTheme();
 
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -24,13 +54,15 @@ export default function RootLayout() {
   }, []);
 
   return (
+    <>
     <Stack 
       screenOptions={{ 
         headerShown: false,
         contentStyle: {
-          maxWidth: isDesktop ? 1200 : '100%',
+          maxWidth: '100%',
           alignSelf: 'center',
           width: '100%',
+          backgroundColor: colors ? colors.bg : '#FFFFFF',
         }
       }}
     >
@@ -56,5 +88,7 @@ export default function RootLayout() {
         options={{ presentation: 'modal' }} 
       />
     </Stack>
+    <GlobalNotification />
+    </>
   );
 }

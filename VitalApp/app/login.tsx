@@ -498,7 +498,7 @@ export default function LoginScreen() {
             >
                 <ScrollView
                     contentContainerStyle={st.scroll}
-                    showsVerticalScrollIndicator={false}
+                    showsVerticalScrollIndicator={true}
                     keyboardShouldPersistTaps="handled"
                     bounces={false}
                 >

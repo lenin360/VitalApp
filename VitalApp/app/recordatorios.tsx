@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MenuInferior from '../components/MenuInferior';
+import TimePickerWheel from '../components/TimePickerWheel';
 import { useTheme } from '../hooks/useTheme';
 
 interface Recordatorio {
@@ -102,10 +103,8 @@ export default function RecordatoriosScreen() {
     };
 
     const agregarRecordatorio = async () => {
-        // Validar hora formato HH:MM
-        const horaRegex = /^([01]?\d|2[0-3]):([0-5]\d)$/;
-        if (!horaRegex.test(nuevaHora)) {
-            Alert.alert('Hora inválida', 'Ingresa la hora en formato HH:MM (ejemplo: 09:00 o 14:30)');
+        if (!nuevaHora) {
+            Alert.alert('Hora inválida', 'Debes seleccionar una hora para el recordatorio');
             return;
         }
         if (diasSeleccionados.length === 0) {
@@ -187,7 +186,7 @@ export default function RecordatoriosScreen() {
                 <Text style={styles.headerSubtitle}>Programa tus horarios de ejercicio</Text>
             </LinearGradient>
 
-            <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={true}>
                 {/* Toggle global */}
                 <View style={styles.globalCard}>
                     <View style={styles.globalInfo}>
@@ -288,15 +287,7 @@ export default function RecordatoriosScreen() {
                         </View>
 
                         <Text style={styles.modalLabel}>Hora (formato HH:MM)</Text>
-                        <TextInput
-                            style={styles.modalInput}
-                            placeholder="Ej: 09:00"
-                            placeholderTextColor="#94A3B8"
-                            value={nuevaHora}
-                            onChangeText={setNuevaHora}
-                            keyboardType="numbers-and-punctuation"
-                            maxLength={5}
-                        />
+                        <TimePickerWheel value={nuevaHora} onChange={setNuevaHora} />
 
                         <Text style={styles.modalLabel}>Nombre del recordatorio</Text>
                         <TextInput
@@ -440,11 +431,16 @@ const styles = StyleSheet.create({
     bottomSpace: { height: 30 },
     // Modal styles
     modalOverlay: {
-        flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end',
+        flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20
     },
     modalContent: {
-        backgroundColor: '#FFFFFF', borderTopLeftRadius: 32, borderTopRightRadius: 32,
-        padding: 28, paddingBottom: 40,
+        backgroundColor: '#FFFFFF', borderRadius: 32,
+        padding: 32, width: '100%', maxWidth: 500,
+        ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 20 },
+            android: { elevation: 10 },
+            web: { boxShadow: '0 10px 40px rgba(0, 0, 0, 0.2)' }
+        })
     },
     modalHeader: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24,
@@ -470,4 +466,20 @@ const styles = StyleSheet.create({
         paddingVertical: 18, gap: 10,
     },
     modalSaveBtnText: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
+    dropdownOverlay: {
+        flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center', padding: 20
+    },
+    dropdownMenu: {
+        backgroundColor: '#FFFFFF', borderRadius: 16, width: '100%', maxWidth: 400,
+        overflow: 'hidden', paddingVertical: 10,
+        ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12 },
+            android: { elevation: 8 },
+            web: { boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)' }
+        })
+    },
+    dropdownItem: {
+        paddingVertical: 16, paddingHorizontal: 24, borderBottomWidth: 1, borderBottomColor: '#F1F5F9'
+    },
+    dropdownItemText: { fontSize: 18, color: '#475569', textAlign: 'center' },
 });
