@@ -29,6 +29,8 @@ interface Video {
     edad_maxima: number;
     peso_maximo_recomendado: number;
     activo: number;
+    enfermedades_incompatibles: string; // Added for diseases
+    id_config?: number | null;
 }
 
 interface ConfigEjercicio {
@@ -67,7 +69,7 @@ const VIDEO_VACIO: Omit<Video, 'id_video'> = {
     nombre_video: '', descripcion: '', categoria: '', subcategoria: '',
     dificultad: 'baja', duracion_min: 0, link_video: '', url_miniatura: '',
     calorias_estimadas: 0, edad_minima: 60, edad_maxima: 100,
-    peso_maximo_recomendado: 0, activo: 1,
+    peso_maximo_recomendado: 0, activo: 1, enfermedades_incompatibles: '', id_config: null,
 };
 
 const CONFIG_VACIA: Omit<ConfigEjercicio, 'id_config'> = {
@@ -136,6 +138,67 @@ const Selector = ({ label, opciones, valor, onSelect }: {
     </View>
 );
 
+// Selector múltiple (para enfermedades incompatibles)
+const MultiSelector = ({ label, opciones, valoresStr, onCambio }: {
+    label: string; opciones: string[]; valoresStr: string;
+    onCambio: (v: string) => void;
+}) => {
+    const seleccionados = valoresStr ? valoresStr.split(',').map(s => s.trim()) : [];
+    
+    const toggle = (op: string) => {
+        if (seleccionados.includes(op)) {
+            onCambio(seleccionados.filter(s => s !== op).join(', '));
+        } else {
+            onCambio([...seleccionados, op].join(', '));
+        }
+    };
+
+    return (
+        <View style={s.campoWrap}>
+            <Text style={s.campoLabel}>{label}</Text>
+            <View style={s.chipRow}>
+                {opciones.map(op => {
+                    const activo = seleccionados.includes(op);
+                    return (
+                        <TouchableOpacity
+                            key={op}
+                            style={[s.chip, activo && { backgroundColor: '#EF4444', borderColor: '#EF4444' }]}
+                            onPress={() => toggle(op)}
+                        >
+                            <Text style={[s.chipTxt, activo && { color: '#FFFFFF' }]} numberOfLines={1}>
+                                {op}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+        </View>
+    );
+};
+
+// Selector con objetos {label, value}
+const SelectorObj = ({ label, opciones, valor, onSelect }: {
+    label: string; opciones: {label: string, value: string}[]; valor: string;
+    onSelect: (v: string) => void;
+}) => (
+    <View style={s.campoWrap}>
+        <Text style={s.campoLabel}>{label}</Text>
+        <View style={s.chipRow}>
+            {opciones.map(op => (
+                <TouchableOpacity
+                    key={op.value}
+                    style={[s.chip, valor === op.value && s.chipActivo]}
+                    onPress={() => onSelect(op.value)}
+                >
+                    <Text style={[s.chipTxt, valor === op.value && s.chipTxtActivo]} numberOfLines={1}>
+                        {op.label}
+                    </Text>
+                </TouchableOpacity>
+            ))}
+        </View>
+    </View>
+);
+
 // ─── Modal genérico ───────────────────────────────────────────────────────────
 
 const ModalForm = ({ visible, titulo, onClose, onGuardar, cargando, children }: {
@@ -151,7 +214,7 @@ const ModalForm = ({ visible, titulo, onClose, onGuardar, cargando, children }: 
                         <Ionicons name="close-circle" size={28} color="#64748B" />
                     </TouchableOpacity>
                 </View>
-                <ScrollView style={s.modalScroll} showsVerticalScrollIndicator={false}>
+                <ScrollView style={s.modalScroll} showsVerticalScrollIndicator={true}>
                     {children}
                 </ScrollView>
                 <TouchableOpacity
@@ -419,7 +482,7 @@ export default function AdminScreen() {
             {/* ── Tabs de sección ── */}
             <View style={s.tabs}>
                 {([
-                    { key: 'videos', label: 'Videos', icon: 'play-circle-outline' },
+                    { key: 'videos', label: 'Ejercicios', icon: 'barbell-outline' },
                     { key: 'config', label: 'Configs', icon: 'settings-outline' },
                     { key: 'usuarios', label: 'Usuarios', icon: 'people-outline' },
                 ] as { key: Seccion; label: string; icon: any }[]).map(t => (
@@ -448,7 +511,7 @@ export default function AdminScreen() {
                 >
                     <Ionicons name="add-circle" size={20} color="#fff" />
                     <Text style={s.btnAgregarTxt}>
-                        {seccion === 'videos' ? 'Nuevo video' : 'Nueva configuración'}
+                        {seccion === 'videos' ? 'Nuevo ejercicio' : 'Nueva configuración'}
                     </Text>
                 </TouchableOpacity>
             )}
@@ -632,8 +695,8 @@ export default function AdminScreen() {
                         {/* Empty state */}
                         {seccion === 'videos' && videos.length === 0 && !cargando && (
                             <View style={s.emptyState}>
-                                <Ionicons name="play-circle-outline" size={48} color="#CBD5E1" />
-                                <Text style={s.emptyTxt}>No hay videos registrados</Text>
+                                <Ionicons name="barbell-outline" size={48} color="#CBD5E1" />
+                                <Text style={s.emptyTxt}>No hay ejercicios registrados</Text>
                             </View>
                         )}
                         {seccion === 'config' && configs.length === 0 && !cargando && (
@@ -657,20 +720,45 @@ export default function AdminScreen() {
             ══════════════════════════════════════════════════ */}
             <ModalForm
                 visible={modalVideo}
-                titulo={videoEdit ? 'Editar video' : 'Nuevo video'}
+                titulo={videoEdit ? 'Editar ejercicio' : 'Nuevo ejercicio'}
                 onClose={() => setModalVideo(false)}
                 onGuardar={guardarVideo}
                 cargando={cargando}
             >
-                <Campo label="Nombre del video *" value={fVideo.nombre_video}
+                <Campo label="Nombre del ejercicio *" value={fVideo.nombre_video}
                     onChangeText={t => setFVideo(p => ({ ...p, nombre_video: t }))} />
                 <Campo label="Descripción" value={fVideo.descripcion} multiline
                     onChangeText={t => setFVideo(p => ({ ...p, descripcion: t }))} />
-                <Campo label="Categoría *" value={fVideo.categoria}
-                    placeholder="Cardio, Fuerza, Flexibilidad…"
-                    onChangeText={t => setFVideo(p => ({ ...p, categoria: t }))} />
-                <Campo label="Subcategoría" value={fVideo.subcategoria}
-                    onChangeText={t => setFVideo(p => ({ ...p, subcategoria: t }))} />
+                
+                <Selector
+                    label="Categoría *"
+                    opciones={['Cardio', 'Zumba', 'Fuerza', 'Flexibilidad', 'Equilibrio', 'Movilidad', 'Silla', 'Relajación', 'Respiración', 'Pilates', 'Yoga', 'Otras']}
+                    valor={fVideo.categoria || 'Cardio'}
+                    onSelect={v => setFVideo(p => ({ ...p, categoria: v }))}
+                />
+                
+                <Selector
+                    label="Subcategoría"
+                    opciones={['Estabilidad', 'Articulaciones', 'Yoga', 'Brazos', 'Piernas', 'Core', 'Ninguna']}
+                    valor={fVideo.subcategoria || 'Ninguna'}
+                    onSelect={v => setFVideo(p => ({ ...p, subcategoria: v }))}
+                />
+                
+                <MultiSelector
+                    label="NO recomendado para (Enfermedades Incompatibles)"
+                    opciones={['Diabetes', 'Hipertensión', 'Cáncer', 'Problemas de corazón', 'Artritis', 'Osteoporosis']}
+                    valoresStr={fVideo.enfermedades_incompatibles || ''}
+                    onCambio={v => setFVideo(p => ({ ...p, enfermedades_incompatibles: v }))}
+                />
+                <SelectorObj
+                    label="Configuración aplicable"
+                    opciones={[
+                        { label: 'Ninguna', value: '' },
+                        ...configs.map(c => ({ label: `Config #${c.id_config} (${c.categoria_recomendada || 'General'})`, value: String(c.id_config) }))
+                    ]}
+                    valor={fVideo.id_config ? String(fVideo.id_config) : ''}
+                    onSelect={v => setFVideo(p => ({ ...p, id_config: v ? parseInt(v) : null }))}
+                />
                 <Selector
                     label="Dificultad"
                     opciones={['baja', 'media', 'alta']}
@@ -734,12 +822,21 @@ export default function AdminScreen() {
                     valor={fConfig.nivel_dificultad ?? ''}
                     onSelect={v => setFConfig(p => ({ ...p, nivel_dificultad: v as any }))}
                 />
-                <Campo label="Condiciones especiales" value={fConfig.condiciones_especiales} multiline
-                    placeholder="Ej: Diabetes, Osteoporosis…"
-                    onChangeText={t => setFConfig(p => ({ ...p, condiciones_especiales: t }))} />
-                <Campo label="Categoría recomendada" value={fConfig.categoria_recomendada}
-                    placeholder="Ej: Cardio, Fuerza, Equilibrio…"
-                    onChangeText={t => setFConfig(p => ({ ...p, categoria_recomendada: t }))} />
+                
+                <MultiSelector
+                    label="Condiciones especiales"
+                    opciones={['Diabetes', 'Hipertensión', 'Cáncer', 'Problemas de corazón', 'Artritis', 'Osteoporosis']}
+                    valoresStr={fConfig.condiciones_especiales || ''}
+                    onCambio={v => setFConfig(p => ({ ...p, condiciones_especiales: v }))}
+                />
+                
+                <MultiSelector
+                    label="Categoría recomendada"
+                    opciones={['Cardio', 'Zumba', 'Fuerza', 'Flexibilidad', 'Equilibrio', 'Movilidad', 'Silla', 'Relajación', 'Respiración', 'Pilates', 'Yoga']}
+                    valoresStr={fConfig.categoria_recomendada || ''}
+                    onCambio={v => setFConfig(p => ({ ...p, categoria_recomendada: v }))}
+                />
+                
                 <Campo label="Máx. minutos diarios" value={fConfig.max_minutos_diarios.toString()}
                     keyboardType="numeric"
                     onChangeText={t => setFConfig(p => ({ ...p, max_minutos_diarios: parseInt(t) || 30 }))} />

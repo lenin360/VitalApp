@@ -236,6 +236,14 @@ async function initDB() {
         await pool.query('ALTER TABLE usuario ADD COLUMN mfa_enabled BOOLEAN DEFAULT FALSE');
         console.log(' Columna mfa_enabled añadida a usuarios');
     } catch (e) { /* Ya existe */ }
+    try {
+        await pool.query('ALTER TABLE videos ADD COLUMN enfermedades_incompatibles VARCHAR(500) DEFAULT NULL');
+        console.log(' Columna enfermedades_incompatibles añadida a videos');
+    } catch (e) { /* Ya existe */ }
+    try {
+        await pool.query('ALTER TABLE videos ADD COLUMN id_config INT DEFAULT NULL');
+        console.log(' Columna id_config añadida a videos');
+    } catch (e) { /* Ya existe */ }
 }
 initDB();
 
@@ -608,7 +616,8 @@ app.get('/api/exercises', async (req, res) => {
         const [rows] = await pool.query(
             `SELECT id_video, nombre_video, descripcion, categoria, subcategoria,
                     dificultad, duracion_min, link_video, url_miniatura,
-                    calorias_estimadas, edad_minima, edad_maxima, peso_maximo_recomendado
+                    calorias_estimadas, edad_minima, edad_maxima, peso_maximo_recomendado,
+                    enfermedades_incompatibles, id_config
              FROM videos
              WHERE activo = 1`
         );
@@ -640,7 +649,7 @@ app.get('/api/exercises/user/:id', async (req, res) => {
         const [rows] = await pool.query(
             `SELECT id_video, nombre_video, descripcion, categoria, subcategoria,
                     dificultad, duracion_min, link_video, url_miniatura,
-                    calorias_estimadas, edad_minima, edad_maxima, peso_maximo_recomendado
+                    calorias_estimadas, edad_minima, edad_maxima, peso_maximo_recomendado, enfermedades_incompatibles, id_config
              FROM videos
              WHERE activo = 1
                AND edad_minima <= ?
@@ -1074,7 +1083,7 @@ app.get('/api/admin/videos', async (req, res) => {
             `SELECT id_video, nombre_video, descripcion, categoria, subcategoria,
                     dificultad, duracion_min, link_video, url_miniatura,
                     calorias_estimadas, edad_minima, edad_maxima,
-                    peso_maximo_recomendado, activo
+                    peso_maximo_recomendado, activo, enfermedades_incompatibles, id_config
              FROM videos ORDER BY id_video DESC`
         );
         res.json({ success: true, videos: rows });
@@ -1088,7 +1097,7 @@ app.get('/api/admin/videos', async (req, res) => {
 app.post('/api/admin/videos', async (req, res) => {
     const { nombre_video, descripcion, categoria, subcategoria, dificultad,
         duracion_min, link_video, url_miniatura, calorias_estimadas,
-        edad_minima, edad_maxima, peso_maximo_recomendado, activo } = req.body;
+        edad_minima, edad_maxima, peso_maximo_recomendado, activo, enfermedades_incompatibles, id_config } = req.body;
 
     if (!nombre_video || !categoria || !dificultad || !duracion_min || !link_video) {
         return res.status(400).json({ success: false, message: 'nombre_video, categoria, dificultad, duracion_min y link_video son obligatorios' });
@@ -1099,12 +1108,12 @@ app.post('/api/admin/videos', async (req, res) => {
             `INSERT INTO videos
                 (nombre_video, descripcion, categoria, subcategoria, dificultad,
                  duracion_min, link_video, url_miniatura, calorias_estimadas,
-                 edad_minima, edad_maxima, peso_maximo_recomendado, activo)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 edad_minima, edad_maxima, peso_maximo_recomendado, activo, enfermedades_incompatibles, id_config)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [nombre_video, descripcion ?? null, categoria, subcategoria ?? null,
                 dificultad, duracion_min, link_video, url_miniatura ?? null,
                 calorias_estimadas ?? null, edad_minima ?? 60, edad_maxima ?? 100,
-                peso_maximo_recomendado ?? null, activo ?? 1]
+                peso_maximo_recomendado ?? null, activo ?? 1, enfermedades_incompatibles ?? null, id_config ?? null]
         );
         res.json({ success: true, id: result.insertId, message: 'Video creado correctamente' });
     } catch (error) {
@@ -1118,19 +1127,19 @@ app.put('/api/admin/videos/:id', async (req, res) => {
     const { id } = req.params;
     const { nombre_video, descripcion, categoria, subcategoria, dificultad,
         duracion_min, link_video, url_miniatura, calorias_estimadas,
-        edad_minima, edad_maxima, peso_maximo_recomendado, activo } = req.body;
+        edad_minima, edad_maxima, peso_maximo_recomendado, activo, enfermedades_incompatibles, id_config } = req.body;
     try {
         const [result] = await pool.query(
             `UPDATE videos SET
                 nombre_video = ?, descripcion = ?, categoria = ?, subcategoria = ?,
                 dificultad = ?, duracion_min = ?, link_video = ?, url_miniatura = ?,
                 calorias_estimadas = ?, edad_minima = ?, edad_maxima = ?,
-                peso_maximo_recomendado = ?, activo = ?
+                peso_maximo_recomendado = ?, activo = ?, enfermedades_incompatibles = ?, id_config = ?
              WHERE id_video = ?`,
             [nombre_video, descripcion ?? null, categoria, subcategoria ?? null,
                 dificultad, duracion_min, link_video, url_miniatura ?? null,
                 calorias_estimadas ?? null, edad_minima ?? 60, edad_maxima ?? 100,
-                peso_maximo_recomendado ?? null, activo ?? 1, id]
+                peso_maximo_recomendado ?? null, activo ?? 1, enfermedades_incompatibles ?? null, id_config ?? null, id]
         );
         if (result.affectedRows > 0) {
             res.json({ success: true, message: 'Video actualizado correctamente' });

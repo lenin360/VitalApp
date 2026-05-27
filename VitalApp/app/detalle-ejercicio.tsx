@@ -200,7 +200,7 @@ export default function DetalleEjercicioScreen() {
                 <View style={{ width: 44 }} />
             </View>
 
-            <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+            <ScrollView style={styles.container} showsVerticalScrollIndicator={true} contentContainerStyle={styles.scrollContent}>
                 
                 {/* Reproductor de Video Adaptable */}
                 <View style={styles.videoCard}>
