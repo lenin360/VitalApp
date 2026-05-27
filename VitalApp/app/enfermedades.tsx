@@ -8,7 +8,8 @@ import {
   StatusBar,
   TouchableOpacity,
   Alert,
-  Platform
+  Platform,
+  useWindowDimensions
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +32,8 @@ const CONDITION_OPTIONS = [
 export default function EnfermedadesScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
   const [selectedConditions, setSelectedConditions] = useState<string[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -136,6 +139,7 @@ export default function EnfermedadesScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={true}
       >
+        <View style={isDesktop ? styles.desktopContainer : undefined}>
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}> 
           <Text style={[styles.title, { color: colors.text }]}>Enfermedades</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Marca las condiciones de salud que aplican para adaptar tus ejercicios de forma más segura.</Text>
@@ -158,6 +162,7 @@ export default function EnfermedadesScreen() {
             <Text style={[styles.backButtonText, { color: colors.text }]}>Volver a inicio</Text>
           </TouchableOpacity>
         </View>
+        </View>
       </ScrollView>
       <MenuInferior />
     </SafeAreaView>
@@ -171,6 +176,11 @@ const styles = StyleSheet.create({
   content: {
     padding: 24,
     paddingBottom: 120,
+  },
+  desktopContainer: {
+    maxWidth: 1200,
+    width: '100%',
+    alignSelf: 'center',
   },
   card: {
     borderRadius: 24,

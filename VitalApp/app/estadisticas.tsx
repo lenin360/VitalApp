@@ -9,7 +9,8 @@ import {
     ActivityIndicator,
     Dimensions,
     StatusBar,
-    Platform
+    Platform,
+    useWindowDimensions
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -56,6 +57,8 @@ function DonutChart({ size = 120, strokeWidth = 12, percentage = 0, color = '#25
 export default function EstadisticasScreen() {
     const router = useRouter();
     const { colors } = useTheme();
+    const { width } = useWindowDimensions();
+    const isDesktop = width >= 768;
     const [cargando, setCargando] = useState(true);
     const [periodoSeleccionado, setPeriodoSeleccionado] = useState('semana');
     const [estadisticas, setEstadisticas] = useState({
@@ -213,6 +216,7 @@ export default function EstadisticasScreen() {
                     colors={[colors.gradientStart, colors.gradientEnd]}
                     style={styles.headerGradient}
                 >
+                  <View style={isDesktop ? styles.desktopContainer : undefined}>
                     <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 8}}>
                         <TouchableOpacity onPress={() => router.push('/home')} style={{marginRight: 16}}>
                             <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
@@ -242,8 +246,10 @@ export default function EstadisticasScreen() {
                             </TouchableOpacity>
                         ))}
                     </View>
+                  </View>
                 </LinearGradient>
 
+                <View style={isDesktop ? styles.desktopContainer : undefined}>
                 {/* Tarjeta de Progreso General */}
                 <View style={[styles.progressCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
                     <View style={styles.progressHeader}>
@@ -404,6 +410,8 @@ export default function EstadisticasScreen() {
                         ))}
                     </View>
                 </View>
+
+                </View>
             </ScrollView>
 
             <MenuInferior />
@@ -414,6 +422,11 @@ export default function EstadisticasScreen() {
 const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
     container: { flex: 1 },
+    desktopContainer: {
+        maxWidth: 1200,
+        width: '100%',
+        alignSelf: 'center',
+    },
     scrollContent: { paddingBottom: 100 },
     centeredContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' },
     loadingText: { marginTop: 16, fontSize: 18, fontWeight: '600', color: '#1E293B' },
