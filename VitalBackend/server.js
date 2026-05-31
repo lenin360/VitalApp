@@ -48,6 +48,10 @@ app.use(helmet({
         },
     },
     crossOriginResourcePolicy: { policy: "cross-origin" },
+    // COOP en unsafe-none para permitir que el popup de Google OAuth
+    // pueda cerrar y comunicar el token de vuelta a la ventana principal.
+    // Sin esto, el flujo de SSO queda bloqueado por el navegador.
+    crossOriginOpenerPolicy: { policy: "unsafe-none" },
 }));
 
 // Set Permissions-Policy header
@@ -97,7 +101,6 @@ function sanitizeInput(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#x27;')
-        .replace(/\//g, '&#x2F;')
         .trim();
         
     // Si el texto cambió, significa que tenía caracteres peligrosos
@@ -130,6 +133,13 @@ const HMAC_SECRET = process.env.HMAC_SECRET;
 function verificarFirma(req, res, next) {
     // Solo verificar en métodos que envían cuerpo
     if (!['POST', 'PUT', 'DELETE'].includes(req.method)) return next();
+
+    // Rutas públicas NO requieren validación de firma
+    const rutasPublicas = ['/login', '/register', '/auth/google', '/mfa/verify-login'];
+    if (rutasPublicas.includes(req.path)) {
+        console.log(` ✅ Saltando validación de firma para ruta pública: ${req.path}`);
+        return next();
+    }
 
     const firma = req.headers['x-signature'];
 
@@ -176,6 +186,7 @@ const openRoutes = [
     '/api/health',
     '/api/login',
     '/api/register',
+    '/api/auth/google',   // ← OAuth SSO: el usuario aún no tiene JWT al entrar con Google
     '/api/mfa/setup',
     '/api/mfa/enable',
     '/api/mfa/verify-login',
@@ -334,11 +345,11 @@ app.post('/api/auth/google', async (req, res) => {
             idToken: token,
             audience: GOOGLE_CLIENT_ID,
         });
-        
+
         const payload = ticket.getPayload();
         const email = payload.email;
         const nombre = payload.name || 'Usuario Google';
-        
+
         console.log(` Token válido. Email recibido de Google: ${email}`);
 
         // Buscar si el usuario ya existe
@@ -357,7 +368,7 @@ app.post('/api/auth/google', async (req, res) => {
             console.log(' Usuario nuevo vía Google SSO, creando cuenta:', email);
             const dummyPassword = crypto.randomBytes(32).toString('hex');
             const hash = await bcrypt.hash(dummyPassword, 10);
-            
+
             const [result] = await pool.query(
                 `INSERT INTO usuario (nombre, email, password_hash, fecha_nacimiento, peso)
                  VALUES (?, ?, ?, '2000-01-01', 70)`,
@@ -369,21 +380,29 @@ app.post('/api/auth/google', async (req, res) => {
             usuario = newRows[0];
         }
 
+        // Generar JWT token
+        const jwtToken = jwt.sign(
+            { id: usuario.id_usuario, email: usuario.email, rol: usuario.rol },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
         // Iniciar sesión y generar sessionId
         const { password_hash: _, ...usuarioSinHash } = usuario;
-        
+
         const sessionId = createSession(req, res, {
             userId: usuarioSinHash.id_usuario,
             email: usuarioSinHash.email,
             rol: usuarioSinHash.rol
         });
-        
+
         console.log(` Login Google SSO exitoso para: ${email} | sessionId: ${sessionId}`);
-        res.json({ success: true, user: usuarioSinHash, message: 'Autenticación con Google exitosa' });
+        res.json({ success: true, user: usuarioSinHash, token: jwtToken, message: 'Autenticación con Google exitosa' });
 
     } catch (error) {
-        console.error(' Error verificando token de Google:', error);
-        res.status(401).json({ success: false, message: 'Token de Google inválido o expirado' });
+        console.error(' Error verificando token de Google:', error.message);
+        console.error(' Stack:', error);
+        res.status(401).json({ success: false, message: 'Token de Google inválido o expirado. ' + error.message });
     }
 });
 
