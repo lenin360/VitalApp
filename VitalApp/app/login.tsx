@@ -214,7 +214,7 @@ const AnimatedBackground = React.memo(() => {
                 width: SW * 0.15,
                 height: SH * 1.5,
                 backgroundColor: 'rgba(255,255,255,0.04)',
-                transform: [{ translateX: shimmer }, { rotate: '25deg' }],
+                transform: [{ translateX: shimmer }, { rotateZ: '25deg' }],
             }} />
 
             {/* Partículas flotantes */}
@@ -243,11 +243,13 @@ const AnimatedBackground = React.memo(() => {
         </>
     );
 });
+AnimatedBackground.displayName = 'AnimatedBackground';
 
 // ── Componentes memoizados ────────────────────────────────────────────────────
 const Lab = React.memo(({ text }: { text: string }) => (
     <Text style={st.label}>{text}</Text>
 ));
+Lab.displayName = 'Lab';
 
 const Inp = React.memo(({ icon, ph, val, set, secure, ac, kb, multi, rIcon, rPress }: any) => (
     <View style={[st.inputWrap, multi && st.inputMulti]}>
@@ -278,6 +280,7 @@ const Inp = React.memo(({ icon, ph, val, set, secure, ac, kb, multi, rIcon, rPre
         )}
     </View>
 ));
+Inp.displayName = 'Inp';
 
 // ── Background wrapper memoizado ──────────────────────────────────────────────
 const Background = React.memo(({ children }: { children: React.ReactNode }) => (
@@ -287,6 +290,7 @@ const Background = React.memo(({ children }: { children: React.ReactNode }) => (
         {children}
     </View>
 ));
+Background.displayName = 'Background';
 
 export default function LoginScreen() {
     const [email, setEmail] = useState('');
@@ -309,10 +313,24 @@ export default function LoginScreen() {
     const [tempUserId, setTempUserId] = useState<number | null>(null);
     const router = useRouter();
 
-    // ── GOOGLE SSO HOOK ───────────────────────────────────────────────────────
+    // ── GOOGLE SSO HOOK (nativo) ───────────────────────────────────────────────
     const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
         clientId: '691441001085-m589115m0oplaunqp33l74jkpc6j3vf0.apps.googleusercontent.com',
     });
+
+    // Cargar Google Identity Services para web (evita el error de COOP con popups)
+    useEffect(() => {
+        if (Platform.OS === 'web' && typeof document !== 'undefined') {
+            if (!document.getElementById('google-gsi-script')) {
+                const script = document.createElement('script');
+                script.id = 'google-gsi-script';
+                script.src = 'https://accounts.google.com/gsi/client';
+                script.async = true;
+                script.defer = true;
+                document.head.appendChild(script);
+            }
+        }
+    }, []);
 
     useEffect(() => {
         if (response?.type === 'success') {
@@ -454,6 +472,7 @@ export default function LoginScreen() {
                 await AsyncStorage.setItem('userEmail', u.email || '');
                 await AsyncStorage.setItem('userAge', (u.edad ?? '').toString());
                 await AsyncStorage.setItem('userRol', u.rol || 'usuario');
+                await AsyncStorage.setItem('jwtToken', data.token); // Guardar JWT token de sesión
                 router.replace(u.rol === 'admin' ? '/admin' : '/home');
             } else {
                 Alert.alert('Error SSO', data.message || 'No se pudo iniciar sesión con Google.');
@@ -466,7 +485,56 @@ export default function LoginScreen() {
     };
 
     const handleOAuthPress = () => {
-        promptAsync();
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+            // En web: usar Google Identity Services (GIS) que usa One Tap / iframe
+            // en lugar de popup, evitando el bloqueo de COOP del navegador.
+            const win = window as any;
+            const GOOGLE_CLIENT_ID = '691441001085-m589115m0oplaunqp33l74jkpc6j3vf0.apps.googleusercontent.com';
+
+            const initGIS = () => {
+                win.google.accounts.id.initialize({
+                    client_id: GOOGLE_CLIENT_ID,
+                    callback: (credentialResponse: any) => {
+                        if (credentialResponse?.credential) {
+                            handleRealGoogleOAuth(credentialResponse.credential);
+                        } else {
+                            Alert.alert('Error SSO', 'Google no devolvió credencial.');
+                        }
+                    },
+                    cancel_on_tap_outside: false,
+                    context: 'signin',
+                });
+                win.google.accounts.id.prompt((notification: any) => {
+                    // Si One Tap fue suprimido (usuario lo descartó antes),
+                    // abrir el selector de cuenta directamente
+                    if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+                        win.google.accounts.id.renderButton(
+                            document.getElementById('g-signin-container') || document.body,
+                            { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill' }
+                        );
+                        // Trigger click programatically
+                        const btn = document.querySelector('#g-signin-container div[role="button"]') as HTMLElement;
+                        if (btn) btn.click();
+                    }
+                });
+            };
+
+            if (win.google?.accounts?.id) {
+                initGIS();
+            } else {
+                // Esperar a que el script de GIS termine de cargar
+                const interval = setInterval(() => {
+                    if (win.google?.accounts?.id) {
+                        clearInterval(interval);
+                        initGIS();
+                    }
+                }, 150);
+                setTimeout(() => clearInterval(interval), 8000);
+            }
+        } else {
+            // En nativo (iOS / Android): usar expo-auth-session como antes
+            promptAsync();
+        }
     };
 
     // ── PANTALLA ERROR ────────────────────────────────────────────────────────
@@ -523,7 +591,7 @@ export default function LoginScreen() {
                             <>
                                 <Lab text="Código de Autenticación (MFA)" />
                                 <Inp icon="key-outline" ph="123456" val={mfaToken} set={setMfaToken} kb="numeric" />
-                                
+
                                 <TouchableOpacity
                                     style={[st.btnWrap, cargando && { opacity: 0.6 }]}
                                     onPress={handleMfaVerify}
@@ -641,14 +709,19 @@ export default function LoginScreen() {
 
                                 {/* Botón SSO Real */}
                                 <TouchableOpacity
-                                    style={[st.btnOAuth, (!request || cargando) && { opacity: 0.6 }]}
+                                    style={[st.btnOAuth, cargando && { opacity: 0.6 }]}
                                     onPress={handleOAuthPress}
-                                    disabled={!request || cargando}
+                                    disabled={cargando}
                                     activeOpacity={0.8}
                                 >
                                     <Ionicons name="logo-google" size={20} color="#EA4335" style={{ marginRight: 10 }} />
                                     <Text style={st.btnOAuthTxt}>Continuar con Google</Text>
                                 </TouchableOpacity>
+
+                                {/* Contenedor invisible para el botón de fallback de GIS */}
+                                {Platform.OS === 'web' && (
+                                    <View nativeID="g-signin-container" style={{ height: 0, overflow: 'hidden' }} />
+                                )}
 
                                 <TouchableOpacity
                                     style={st.switchRow}
