@@ -319,7 +319,13 @@ app.post('/api/login', async (req, res) => {
         }
 
         const token = jwt.sign({ id: usuarioSinHash.id_usuario, email: usuarioSinHash.email, rol: usuarioSinHash.rol }, JWT_SECRET, { expiresIn: '7d' });
-        console.log(' Login exitoso para:', email);
+        // Crear sesión y guardar cookie sessionId
+        const sessionId = createSession(req, res, {
+            userId: usuarioSinHash.id_usuario,
+            email: usuarioSinHash.email,
+            rol: usuarioSinHash.rol
+        });
+        console.log(` Login exitoso para: ${email} | sessionId: ${sessionId}`);
         res.json({ success: true, user: usuarioSinHash, token });
 
     } catch (error) {
