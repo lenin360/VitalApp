@@ -243,11 +243,13 @@ const AnimatedBackground = React.memo(() => {
         </>
     );
 });
+AnimatedBackground.displayName = 'AnimatedBackground';
 
 // ── Componentes memoizados ────────────────────────────────────────────────────
 const Lab = React.memo(({ text }: { text: string }) => (
     <Text style={st.label}>{text}</Text>
 ));
+Lab.displayName = 'Lab';
 
 const Inp = React.memo(({ icon, ph, val, set, secure, ac, kb, multi, rIcon, rPress }: any) => (
     <View style={[st.inputWrap, multi && st.inputMulti]}>
@@ -278,6 +280,7 @@ const Inp = React.memo(({ icon, ph, val, set, secure, ac, kb, multi, rIcon, rPre
         )}
     </View>
 ));
+Inp.displayName = 'Inp';
 
 // ── Background wrapper memoizado ──────────────────────────────────────────────
 const Background = React.memo(({ children }: { children: React.ReactNode }) => (
@@ -287,6 +290,7 @@ const Background = React.memo(({ children }: { children: React.ReactNode }) => (
         {children}
     </View>
 ));
+Background.displayName = 'Background';
 
 export default function LoginScreen() {
     const [email, setEmail] = useState('');
