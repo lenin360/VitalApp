@@ -105,7 +105,7 @@ function sanitizeInput(value) {
 
     // Si el texto cambió, significa que tenía caracteres peligrosos
     if (sanitized !== value.trim()) {
-        console.warn(`[ADVERTENCIA] [ALERTA DE SEGURIDAD] Se detectaron y neutralizaron caracteres peligrosos. Entrada original contenía inyección.`);
+        console.warn(`[ALERTA DE SEGURIDAD] Se detectaron y neutralizaron caracteres peligrosos. Entrada original contenía inyección.`);
     }
 
     return sanitized;
@@ -137,7 +137,7 @@ function verificarFirma(req, res, next) {
     // Rutas públicas NO requieren validación de firma
     const rutasPublicas = ['/login', '/register', '/auth/google', '/mfa/verify-login'];
     if (rutasPublicas.includes(req.path)) {
-        console.log(` [INFO] Saltando validación de firma para ruta pública: ${req.path}`);
+        console.log(`[INFO] Saltando validación de firma para ruta pública: ${req.path}`);
         return next();
     }
 
@@ -163,7 +163,7 @@ function verificarFirma(req, res, next) {
         .digest('hex');
 
     if (firma !== firmaEsperada) {
-        console.warn('🚫 Firma inválida en:', req.path, '| recibida:', firma, '| esperada:', firmaEsperada);
+        console.warn('[BLOQUEO] Firma inválida en:', req.path, '| recibida:', firma, '| esperada:', firmaEsperada);
         return res.status(400).json({
             success: false,
             message: 'Firma inválida. Los datos pueden haber sido manipulados.'
@@ -436,8 +436,14 @@ app.post('/api/mfa/setup', async (req, res) => {
 });
 
 app.post('/api/mfa/enable', async (req, res) => {
+    console.log('\n[DEBUG] --- /api/mfa/enable ---');
+    console.log('[DEBUG] Body:', req.body);
+    
     const { userId, token } = req.body;
-    if (!userId || !token) return res.status(400).json({ success: false, message: 'Faltan datos' });
+    if (!userId || !token) {
+        console.log('[DEBUG] [ERROR] Faltan datos (userId o token)');
+        return res.status(400).json({ success: false, message: 'Faltan datos' });
+    }
 
     try {
         const [rows] = await pool.query('SELECT mfa_secret FROM usuario WHERE id_usuario = ?', [userId]);
@@ -445,19 +451,30 @@ app.post('/api/mfa/enable', async (req, res) => {
             return res.json({ success: false, message: 'MFA no configurado' });
         }
 
+        const expectedToken = speakeasy.totp({
+            secret: rows[0].mfa_secret,
+            encoding: 'base32'
+        });
+        
+        console.log(`[MFA] ID: ${userId} | Token recibido: ${token} | Token esperado aprox: ${expectedToken}`);
+
         const verified = speakeasy.totp.verify({
             secret: rows[0].mfa_secret,
             encoding: 'base32',
-            token: token
+            token: token,
+            window: 2 // Regresamos a 2 ventanas (1 minuto), que es lo estándar
         });
 
         if (verified) {
             await pool.query('UPDATE usuario SET mfa_enabled = 1 WHERE id_usuario = ?', [userId]);
+            console.log(`[MFA] [EXITO] ¡Token correcto! MFA habilitado para ID ${userId}`);
             res.json({ success: true, message: 'MFA habilitado correctamente' });
         } else {
+            console.log(`[MFA] [ERROR] Token INCORRECTO`);
             res.json({ success: false, message: 'Token incorrecto' });
         }
     } catch (e) {
+        console.error(' Error en MFA enable:', e);
         res.status(500).json({ success: false, message: 'Error del servidor' });
     }
 });
@@ -490,7 +507,7 @@ app.post('/api/mfa/verify-login', async (req, res) => {
             secret: usuario.mfa_secret,
             encoding: 'base32',
             token: token,
-            window: 1 // Permitir ligero desfase de tiempo
+            window: 2 // Permitir ligero desfase de tiempo
         });
 
         if (verified) {
